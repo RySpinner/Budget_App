@@ -6,6 +6,10 @@ Household spending tracker: Python + Streamlit app with a PostgreSQL backend on 
 - Read `SPEC.md`. It is the source of truth for requirements and design decisions.
 - If a task conflicts with SPEC.md or touches an item marked OPEN, ask before deciding.
 - Work in the build phases listed in SPEC.md section 10, one phase at a time, and stop for review after each.
+- Read `DECISIONS.md` and `TODO.md` too. When you make a call SPEC.md doesn't settle, add it to the
+  *Review* list in `DECISIONS.md` (the owner reassesses these later). When the owner decides something,
+  record it under *Decided* with the date. Add reminders and open items to `TODO.md`.
+- At the end of a session, add a short summary in `docs/sessions/<date>.md`.
 
 ## Non-negotiables
 - Money is stored as integer cents. Never use floats for amounts.

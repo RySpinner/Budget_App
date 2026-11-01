@@ -36,6 +36,25 @@ Activate the environment again in each new terminal before running the commands 
 
 Both copied files are gitignored. You can also set `BUDGET_DATABASE_URL` instead of using `secrets.toml` (PowerShell: `$env:BUDGET_DATABASE_URL = "postgresql://..."`).
 
+## Local PostgreSQL (development)
+
+PostgreSQL **15 or newer** is required. Use 17 to match the Raspberry Pi.
+
+**Windows**
+1. Install from https://www.postgresql.org/download/windows/ (the EDB installer). Keep the defaults: server, pgAdmin, command-line tools, port 5432. Write down the `postgres` password you choose. Skip Stack Builder.
+2. Open **SQL Shell (psql)** from the Start menu, press Enter to accept the defaults, then enter the `postgres` password and run:
+   ```sql
+   CREATE ROLE budget_app LOGIN PASSWORD 'pick-a-password';
+   CREATE DATABASE household_budget OWNER budget_app;
+   ```
+3. Put that password in `config\secrets.toml`. Avoid `@ : / #` in passwords that go into `postgresql://` URLs.
+
+**Mac / Linux:** install PostgreSQL with your package manager (or Postgres.app on a Mac), then run the same two SQL lines as the `postgres` user.
+
+**Docker (any system):** `docker run -d --name budget-pg -e POSTGRES_PASSWORD=devpass -p 5432:5432 postgres:17`
+
+To start the database over, connect as `postgres` to the `postgres` database and run `DROP DATABASE household_budget;` then the `CREATE DATABASE` line above. Then run migrate and seed again.
+
 ## Database
 
 ```bash
@@ -46,7 +65,8 @@ python -m budget.seed               # add missing categories, people, cards (saf
 
 - After pulling new code, run `python -m budget.migrate` again: it applies any new migrations (e.g. `0002_spending_lines.sql`) and skips ones already applied.
 - **Migrations** are numbered SQL files in `migrations/`. Never edit one that has been applied; add a new file instead. The runner wraps each file in a transaction and records it in `schema_migrations`.
-- **Seeding** only inserts rows that are missing (matched by name). It never renames or deletes, so edits made later in the app are safe.
+- **Seeding** only inserts rows that are missing (matched by name). It never renames or deletes, so edits made later in the app are safe. If `local.toml` disagrees with an existing card, it prints a warning; change that card in the database instead, e.g. `UPDATE cards SET parser_key = 'citi' WHERE id = 1;`.
+- **Adding a category:** add it to `seed/categories.toml` and run `python -m budget.seed`. To retire one, set `active = false` in the database rather than deleting it; if you rename one, rename it in the TOML file too.
 
 ## Running the app
 
@@ -91,6 +111,12 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/postgres pytest -q
 ```
 
 Use a Postgres user that is allowed to create databases. With the default `postgres` user, add its password to the URL (`postgresql://postgres:PASSWORD@localhost:5432/postgres`).
+
+## Project notes
+
+- `DECISIONS.md`: choices made while building, with the ones to reassess listed under *Review*.
+- `TODO.md`: reminders and open items.
+- `docs/sessions/`: a short summary of each build session.
 
 ## Layout
 

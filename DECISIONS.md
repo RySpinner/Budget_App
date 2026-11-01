@@ -1,0 +1,82 @@
+# Decisions
+
+Calls made while building that SPEC.md didn't settle. SPEC.md stays the source of
+truth for requirements; this file records *how* things were decided and what is
+worth a second look.
+
+- **Review** = made by Claude, not yet confirmed by the owner. Reassess when convenient.
+- **Decided** = confirmed by the owner (date in brackets).
+
+When an item is confirmed or changed, move it to *Decided* (or update SPEC.md if it
+changes a requirement). Newest items go at the end of each section.
+
+---
+
+## Review (made by Claude, not yet confirmed)
+
+### Data model and database (Phase 1)
+1. **Migrations:** plain numbered SQL files plus a small runner (`budget/migrate.py`), not Alembic. Chosen for readability.
+2. **Rules enforced by the database itself:**
+   - Categories are limited to two levels.
+   - Transactions, splits and rules must point at a subcategory.
+   - Budgets go on top-level categories, and `effective_from` must be the 1st of a month.
+   - Card rows must have a card, an import batch and a fingerprint. Manual rows must have none of these and no posted date.
+   - `category_id` and `category_source` are both set or both empty.
+3. **Manual-category protection is also a database trigger.** A rule can never overwrite a `manual` category, even if app code has a bug.
+4. **Split totals are checked by a deferred database trigger**, at commit, so splits can be replaced within one transaction. Changing the parent amount is checked too.
+5. **Manual entries have no fingerprint** (NULL). Dedup only applies to card rows.
+6. **`import_batches.file_sha256` is not unique.** Re-importing a file after undoing it is allowed; the app warns "already imported" instead.
+7. **PostgreSQL 15 or newer is required.** The schema uses `UNIQUE NULLS NOT DISTINCT`. 17 is recommended to match current Raspberry Pi OS.
+8. **The seed only inserts, never updates.** If `seed/local.toml` disagrees with an existing card, it prints a warning. Existing rows are changed in the database (and later in a Settings page).
+
+### Importing (Phases 2–3)
+9. **Excluded rows are not stored as transactions.** Only their count is saved, in `import_batches.rows_excluded`. The rows themselves survive only in the archived CSV.
+10. **Citi's single `Date` column is treated as the transaction date.** `posted_date` stays NULL for Citi rows.
+11. **Every Citi Credit becomes a negative amount,** whatever sign Citi uses.
+12. **Citi exclusion patterns are guesses.** Payments match `AUTOPAY`, `AUTO-PMT`, or `PAYMENT … THANK YOU`; then `BALANCE TRANSFER`, then rewards wording. Pending rows (Status = Pending) are excluded. Not yet checked against real payment or refund rows (see TODO.md, "Credits").
+13. **Merchant cleanup:**
+    - strips processor prefixes (`SQ *`, `TST*`, …), masked card numbers, `null`, and trailing numbers and state codes;
+    - removes `#1234` store numbers;
+    - keeps the bank's capitalisation.
+14. **Archived files** are named `<batch id, 6 digits>_<original filename>`. The default folder is `archive/` in the project, configurable in `secrets.toml`.
+15. **Undoing an import deletes its rows**, including any categories, notes or splits added since. The page warns first. The archived file is kept.
+16. **Card auto-detection** happens only when exactly one active card's parser can read the file. The masked number in Citi descriptions is NOT used (see Decided).
+
+### Rules and review (Phase 4)
+17. **Rule order:** lower priority number first, then oldest rule first; the first match wins.
+18. **Matching:**
+    - `contains` and `exact` ignore case and treat runs of spaces as one.
+    - `regex` uses Python syntax and ignores case.
+19. **Re-running rules after edits** moves each rule-categorized row to whichever rule now matches it, or back to Review if none matches. Manual rows are never touched. Merchant names a rule set earlier are *not* reverted.
+    - *Alternative:* keep the old category when no rule matches any more.
+20. **A rule's `merchant_name` replaces the cleaned merchant name**, both at import and when rules are re-run.
+21. **"Save as rule" from Review:**
+    - The suggested pattern is the longest run of the merchant's leading words that appears in the bank description.
+    - New rules get priority 100.
+    - The new rule is applied only to rows still uncategorized.
+22. **Categories chosen in Review or Transactions count as `manual`.**
+
+### Transactions page (Phase 5)
+23. **The `spending_lines` view and budget functions were built in Phase 5** (migration 0002), not Phase 6 as SPEC lists, because the Transactions page needed them.
+24. **Budget-to-date** = monthly budget × day ÷ days in month, using exact decimals and rounded to the nearest cent.
+25. **Running totals follow the filters.** With a card, purchaser or subcategory filter on, they add up only the rows shown, and the page says so.
+26. **The Transactions page opens on the current month**, which may be empty early in a month.
+27. **A split needs at least two lines.** Split transactions are left out of the Review queue, because their categories live on the split lines.
+28. **Manual entries** use the typed description as both `raw_description` and `merchant`.
+
+### Not yet addressed
+29. **No password on the app yet** (planned for Phase 7). Anyone on the home network can open it while it's running.
+30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
+
+---
+
+## Decided (confirmed by the owner)
+
+- **[2026-11-01] Starting taxonomy:** seed the SPEC §4 table as-is. The taxonomy itself is still OPEN until both partners confirm.
+- **[2026-11-01] People and cards** live in the untracked `seed/local.toml`. The committed example file uses placeholders.
+- **[2026-11-01] Interest and fees count as spending** (not excluded). SPEC §5 updated.
+- **[2026-11-01] "Fees & Interest" is a subcategory under Discretionary**, "for now". Revisit if it causes headaches.
+- **[2026-11-01] The masked card number in Citi descriptions** (`XXXXXXXXXXXX1234`) is probably a per-merchant virtual number, not the card's last 4. Don't use it to identify the card.
+- **[2026-11-01] The trailing blank rows in the Citi sample** came from hand-editing the file. The parser skips blank rows anywhere anyway.
+- **[2026-11-01] Development laptop is Windows (PowerShell).** Docs give Windows and Mac/Linux commands.
+- **[2026-11-01] Seed warns** when `local.toml` disagrees with an existing card.
