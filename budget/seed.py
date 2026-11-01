@@ -58,8 +58,13 @@ def _get_or_create_category(conn, name: str, parent_id: int | None, sort_order: 
     return row[0], True
 
 
-def seed_people_and_cards(conn: psycopg.Connection, data: dict) -> tuple[int, int]:
-    """Insert missing people and cards. Returns (people_added, cards_added)."""
+def seed_people_and_cards(conn: psycopg.Connection, data: dict) -> tuple[int, int, list[str]]:
+    """Insert missing people and cards.
+
+    Returns (people_added, cards_added, warnings). Cards that already exist
+    are never changed; if local.toml disagrees with the database, a warning
+    explains the difference so it can be fixed in the database instead.
+    """
     people_added = 0
     for person in data.get("person", []):
         cur = conn.execute(
@@ -69,20 +74,48 @@ def seed_people_and_cards(conn: psycopg.Connection, data: dict) -> tuple[int, in
         people_added += cur.rowcount
 
     cards_added = 0
+    warnings = []
     for card in data.get("card", []):
         owner = conn.execute("SELECT id FROM people WHERE name = %s", (card["owner"],)).fetchone()
         if owner is None:
             raise ValueError(f"Card {card['display_name']!r}: owner {card['owner']!r} is not a known person")
-        cur = conn.execute(
+        wanted = {
+            "issuer": card["issuer"],
+            "last4": card.get("last4"),
+            "owner": card["owner"],
+            "parser_key": card["parser_key"],
+        }
+
+        existing = conn.execute(
             """
-            INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (display_name) DO NOTHING
+            SELECT c.id, c.issuer, c.last4, p.name, c.parser_key
+              FROM cards c JOIN people p ON p.id = c.owner_person_id
+             WHERE c.display_name = %s
             """,
-            (card["display_name"], card["issuer"], card.get("last4"), owner[0], card["parser_key"]),
-        )
-        cards_added += cur.rowcount
-    return people_added, cards_added
+            (card["display_name"],),
+        ).fetchone()
+
+        if existing is None:
+            conn.execute(
+                """
+                INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (card["display_name"], wanted["issuer"], wanted["last4"], owner[0], wanted["parser_key"]),
+            )
+            cards_added += 1
+            continue
+
+        card_id, *values = existing
+        current = dict(zip(["issuer", "last4", "owner", "parser_key"], values))
+        for field, value in wanted.items():
+            if (current[field] or None) != (value or None):
+                warnings.append(
+                    f"Card {card['display_name']!r} (id {card_id}) already exists with "
+                    f"{field} = {current[field]!r}; local.toml says {value!r}. Not changed: "
+                    f"seeding never edits existing rows, so update it in the database."
+                )
+    return people_added, cards_added, warnings
 
 
 def main() -> None:
@@ -95,8 +128,10 @@ def main() -> None:
         print(f"categories: {added} added")
 
         if args.local.exists():
-            people, cards = seed_people_and_cards(conn, load_toml(args.local))
+            people, cards, warnings = seed_people_and_cards(conn, load_toml(args.local))
             print(f"people: {people} added, cards: {cards} added")
+            for warning in warnings:
+                print(f"WARNING: {warning}")
         else:
             print(f"No {args.local} found; skipped people and cards (see seed/local.example.toml).")
 
