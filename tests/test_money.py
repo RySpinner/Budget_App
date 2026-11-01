@@ -21,3 +21,10 @@ def test_format_cents():
     assert format_cents(123456) == "$1,234.56"
     assert format_cents(-500) == "-$5.00"
     assert format_cents(7) == "$0.07"
+
+
+def test_format_plain_round_trips():
+    from budget.money import format_plain
+    for cents in [0, 5, 1234, -1525, 102399]:
+        assert parse_cents(format_plain(cents)) == cents
+    assert format_plain(-500) == "-5.00"

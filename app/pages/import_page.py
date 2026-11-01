@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from budget.categories import subcategory_choices
+from app.ui import md
 from budget.db import connect
 from budget.importer import commit_import, detect_card, preview_import, undo_import
 from budget.money import format_cents
@@ -21,7 +22,7 @@ state.setdefault("flash", None)           # one-off message shown after a rerun
 st.title("Import")
 
 if state.flash:
-    st.success(state.flash)
+    st.success(md(state.flash))
     state.flash = None
 
 try:
@@ -31,13 +32,13 @@ try:
         ).fetchall()
         category_names = subcategory_choices(conn, include_inactive=True)
 except Exception as e:  # e.g. database not reachable
-    st.error(f"Could not connect to the database: {e}")
+    st.error(md(f"Could not connect to the database: {e}"))
     st.stop()
 
 card_names = dict(cards)
 
 if not cards:
-    st.warning("No cards set up yet. Add them to seed/local.toml and run `python -m budget.seed`.")
+    st.warning(md("No cards set up yet. Add them to seed/local.toml and run `python -m budget.seed`."))
     st.stop()
 
 
@@ -77,7 +78,7 @@ for f in uploaded or []:
         st.subheader(f.name)
 
         if f.file_id in state.imported:
-            st.success(f"Imported as batch {state.imported[f.file_id]}.")
+            st.success(md(f"Imported as batch {state.imported[f.file_id]}."))
             continue
 
         with connect() as conn:
@@ -100,7 +101,7 @@ for f in uploaded or []:
             with connect() as conn:
                 preview = preview_import(conn, card_id, f.name, data)
         except ValueError as e:
-            st.error(str(e))
+            st.error(md(str(e)))
             continue
 
         c1, c2, c3, c4 = st.columns(4)
@@ -111,7 +112,7 @@ for f in uploaded or []:
 
         if preview.already_imported_batch_ids:
             batches = ", ".join(map(str, preview.already_imported_batch_ids))
-            st.info(f"This exact file was already imported (batch {batches}). Duplicates will be skipped.")
+            st.info(md(f"This exact file was already imported (batch {batches}). Duplicates will be skipped."))
 
         if preview.new_rows:
             st.markdown("**New rows**")
@@ -196,11 +197,11 @@ else:
 
     if state.confirm_undo is not None:
         batch_id = state.confirm_undo
-        st.warning(
+        st.warning(md(
             f"Undo batch {batch_id}? This deletes every transaction it added, including any "
             "categories, notes or splits you have set on them since. The archived CSV is kept, "
             "so the file can be imported again."
-        )
+        ))
         yes, no, _ = st.columns([1, 1, 4])
         if yes.button("Yes, undo it", type="primary"):
             with connect() as conn:

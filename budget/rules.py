@@ -205,7 +205,10 @@ def categorize_manually(
             conn, save_rule_pattern, category_id, created_from_transaction_id=transaction_id
         )
         uncategorized_ids = [
-            r[0] for r in conn.execute("SELECT id FROM transactions WHERE category_id IS NULL")
+            r[0] for r in conn.execute(
+                """SELECT id FROM transactions t WHERE category_id IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)"""
+            )
         ]
         result = apply_rules(conn, uncategorized_ids) if uncategorized_ids else ApplyResult()
         return rule_id, result.categorized

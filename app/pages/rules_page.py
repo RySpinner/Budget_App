@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from budget.categories import subcategory_choices
+from app.ui import md
 from budget.db import connect
 from budget.money import format_cents, parse_cents
 from budget.rules import MATCH_TYPES, apply_rules, create_rule, validate_rule
@@ -19,7 +20,7 @@ state.setdefault("rules_flash", None)
 st.title("Rules")
 
 if state.rules_flash:
-    st.success(state.rules_flash)
+    st.success(md(state.rules_flash))
     state.rules_flash = None
 
 with connect() as conn:
@@ -116,7 +117,7 @@ else:
 
         if errors:
             for e in errors:
-                st.error(e)
+                st.error(md(e))
         else:
             with connect() as conn:
                 with conn.transaction():
@@ -162,7 +163,7 @@ with st.expander("Add a rule"):
                 state.rules_round += 1
                 st.rerun()
             except ValueError as e:
-                st.error(str(e))
+                st.error(md(str(e)))
 
 if st.button("Re-run all rules"):
     with connect() as conn:

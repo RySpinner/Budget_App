@@ -2,7 +2,7 @@
 
 Python + Streamlit + PostgreSQL, running on a Raspberry Pi. See `SPEC.md` for requirements and `CLAUDE.md` for working rules.
 
-**Status:** Phases 1–4 are done: schema and seed data, the Citi parser and import pipeline, the Import page, and categorization rules with the Review and Rules pages. Later phases are listed in SPEC.md section 10.
+**Status:** Phases 1–5 are done: schema and seed data, the Citi parser and import pipeline, the Import page, categorization rules (Review and Rules pages), and the Transactions page. Later phases are listed in SPEC.md section 10.
 
 ## Setup
 
@@ -44,6 +44,7 @@ python -m budget.migrate --status   # show applied / pending
 python -m budget.seed               # add missing categories, people, cards (safe to re-run)
 ```
 
+- After pulling new code, run `python -m budget.migrate` again: it applies any new migrations (e.g. `0002_spending_lines.sql`) and skips ones already applied.
 - **Migrations** are numbered SQL files in `migrations/`. Never edit one that has been applied; add a new file instead. The runner wraps each file in a transaction and records it in `schema_migrations`.
 - **Seeding** only inserts rows that are missing (matched by name). It never renames or deletes, so edits made later in the app are safe.
 
@@ -56,6 +57,7 @@ streamlit run app/streamlit_app.py
 Then open http://localhost:8501. The **Import** page takes CSV uploads (drag and drop, several at once). It picks the card when only one active card's parser can read the file, shows a preview (new / duplicate / excluded), and writes nothing until you click Import. Past imports are listed below it, with undo.
 
 - **Review** lists uncategorized transactions. Pick a category for any row; tick *Save as rule* to also create a rule (pre-filled pattern, editable) that categorizes matching rows from now on.
+- **Transactions** shows every spending line with filters for month, category, subcategory, card and purchaser. Choosing one top-level category gives the old per-sheet layout: date, amount, running monthly total, merchant, card, budget-to-date, note, purchaser. Edit category, note and purchaser in the table and press Save. Below the table you can split a transaction across categories (lines must add up exactly), delete a manual entry, and add a cash / manual entry.
 - **Rules** lists every rule with how many transactions it currently covers. Edit, deactivate or delete rules, or add new ones, then re-run them. Rules are tried by priority (lower first) and the first match wins. Rules never change a category you chose by hand.
 
 Rules also run automatically on new rows during import; the preview shows which category each row will get. To re-run all rules from the command line: `python -m budget.rules`.
@@ -93,8 +95,8 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 ## Layout
 
 ```
-app/           Streamlit app (streamlit_app.py + pages/)
-budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories
+app/           Streamlit app (streamlit_app.py, pages/, ui.py helpers)
+budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions
 budget/parsers one module per card issuer (citi.py), sharing base.ParsedRow
 migrations/    versioned schema changes
 seed/          categories.toml (tracked), local.toml (untracked: people and cards)

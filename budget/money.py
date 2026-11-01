@@ -29,3 +29,10 @@ def format_cents(cents: int) -> str:
     sign = "-" if cents < 0 else ""
     dollars, rem = divmod(abs(cents), 100)
     return f"{sign}${dollars:,}.{rem:02d}"
+
+
+def format_plain(cents: int) -> str:
+    """12345 -> "123.45", -500 -> "-5.00" (for editable amount fields)."""
+    sign = "-" if cents < 0 else ""
+    dollars, rem = divmod(abs(cents), 100)
+    return f"{sign}{dollars}.{rem:02d}"

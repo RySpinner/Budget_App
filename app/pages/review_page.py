@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from budget.categories import subcategory_choices
+from app.ui import md
 from budget.db import connect
 from budget.money import format_cents
 from budget.rules import categorize_manually, suggest_pattern
@@ -26,7 +27,7 @@ state.setdefault("review_flash", None)
 st.title("Review")
 
 if state.review_flash:
-    st.success(state.review_flash)
+    st.success(md(state.review_flash))
     state.review_flash = None
 
 with connect() as conn:
@@ -37,6 +38,7 @@ with connect() as conn:
           FROM transactions t
           LEFT JOIN cards c ON c.id = t.card_id
          WHERE t.category_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)  -- split lines carry the categories
          ORDER BY t.effective_date DESC, t.id
         """
     ).fetchall()
@@ -92,7 +94,7 @@ if st.button(f"Save {plural(len(chosen), 'categorized row')}", type="primary", d
     ]
     if problems:
         for p in problems:
-            st.error(p)
+            st.error(md(p))
         st.stop()
 
     rules_made, also_categorized = 0, 0
