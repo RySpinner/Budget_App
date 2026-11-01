@@ -15,6 +15,26 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SECRETS_FILE = PROJECT_ROOT / "config" / "secrets.toml"
 
 
+def _load_secrets() -> dict:
+    if not SECRETS_FILE.exists():
+        return {}
+    with SECRETS_FILE.open("rb") as f:
+        return tomllib.load(f)
+
+
+def archive_dir() -> Path:
+    """Where original CSV files are archived (named by batch id).
+
+    BUDGET_ARCHIVE_DIR overrides [paths] archive_dir in secrets.toml;
+    the default is ./archive in the project (gitignored).
+    """
+    configured = os.environ.get("BUDGET_ARCHIVE_DIR") or _load_secrets().get("paths", {}).get("archive_dir")
+    if not configured:
+        return PROJECT_ROOT / "archive"
+    path = Path(configured).expanduser()
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
 def database_conninfo() -> str:
     url = os.environ.get("BUDGET_DATABASE_URL")
     if url:
@@ -26,8 +46,7 @@ def database_conninfo() -> str:
             "(see config/secrets.example.toml)."
         )
 
-    with SECRETS_FILE.open("rb") as f:
-        db = tomllib.load(f)["database"]
+    db = _load_secrets()["database"]
 
     return make_conninfo(
         host=db.get("host", "localhost"),

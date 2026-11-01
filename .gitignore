@@ -4,8 +4,8 @@ seed/local.toml
 .streamlit/secrets.toml
 
 # Real bank data and database dumps: never commit
-*.csv
-!tests/fixtures/**/*.csv
+*.[cC][sS][vV]
+!tests/fixtures/**/*.[cC][sS][vV]
 archive/
 *.dump
 *.sql.gz
