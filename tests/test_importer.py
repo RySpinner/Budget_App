@@ -150,3 +150,33 @@ def test_rules_apply_during_import(conn, citi_card, tmp_path):
         (batch,),
     ).fetchall()
     assert rows == [(coffee, "rule", rule_id, "Fake Coffee")] * 2
+
+
+def test_detect_card_picks_by_bank_format(conn, citi_card):
+    chase_card = conn.execute(
+        "INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key) "
+        "VALUES ('Fake Chase', 'Chase', '2222', %s, 'chase') RETURNING id",
+        (citi_card["person"],),
+    ).fetchone()[0]
+    chase_file = (Path(__file__).parent / "fixtures" / "chase" / "sample.csv").read_bytes()
+    assert detect_card(conn, FIXTURE.read_bytes()) == citi_card["card"]
+    assert detect_card(conn, chase_file) == chase_card
+
+
+def test_chase_import_uses_transaction_date_and_keeps_post_date(conn, citi_card, tmp_path):
+    card = conn.execute(
+        "INSERT INTO cards (display_name, issuer, owner_person_id, parser_key) "
+        "VALUES ('Fake Chase 2', 'Chase', %s, 'chase') RETURNING id",
+        (citi_card["person"],),
+    ).fetchone()[0]
+    data = (Path(__file__).parent / "fixtures" / "chase" / "sample.csv").read_bytes()
+    p = preview_import(conn, card, "chase.csv", data)
+    assert (len(p.new_rows), len(p.excluded_rows)) == (6, 2)
+    batch = commit_import(conn, p, archive=tmp_path)
+    row = conn.execute(
+        "SELECT txn_date, posted_date, effective_date, amount_cents FROM transactions "
+        "WHERE import_batch_id = %s AND raw_description = 'FAKE CAFE'", (batch,),
+    ).fetchone()
+    assert [str(v) for v in row[:3]] + [row[3]] == ["2026-10-29", "2026-10-30", "2026-10-29", 888]
+    again = preview_import(conn, card, "chase.csv", data)
+    assert (len(again.new_rows), len(again.duplicate_rows)) == (0, 6)

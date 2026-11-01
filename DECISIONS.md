@@ -105,6 +105,17 @@ changes a requirement). Newest items go at the end of each section.
 46. **The backup job runs as the `budget` user**, with the database password in `~budget/.pgpass` and its own SSH key. It doesn't run as root.
 47. **Systemd hardening:** `NoNewPrivileges`, `ProtectSystem=full`, `PrivateTmp`. The app binds to `0.0.0.0:8501` (LAN only, behind the router; never port-forwarded).
 
+### Chase parser
+48. **Row type comes from Chase's own Type column** (only "Sale" seen in a real file so far; the others follow Chase's usual export):
+    - Sale → purchase
+    - Return → refund
+    - Payment → excluded (card payment)
+    - Fee → purchase (interest and fees count as spending)
+    - Adjustment → purchase or refund by its sign, except rewards wording (`REDEMPTION`, `REDEEM`, `CASH BACK`, `REWARDS`), which is excluded as a rewards redemption.
+49. **Chase's sign is flipped** (Chase: charges negative). Transaction Date becomes `txn_date` and Post Date becomes `posted_date`, so months follow the transaction date.
+50. **Chase's own Category column is kept in `raw_row` but not used.** It could later pre-fill category suggestions in Review.
+51. **A comma in a Chase description is re-joined,** on the assumption that the last four columns (Category, Type, Amount, Memo) never contain commas.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 
@@ -122,6 +133,7 @@ changes a requirement). Newest items go at the end of each section.
 - **[2026-11-01] Seed warns** when `local.toml` disagrees with an existing card.
 - **[2026-11-01] Citi's real CSV format** (as downloaded, viewed in Notepad): descriptions are quoted, amounts are not. A credit looks like ` -$ 1,878.69`, and its thousands comma splits it across two columns. Handle it in the parser (#39) rather than asking the owner to clean files.
 - **[2026-11-01] Files opened and saved in Excel change format:** amounts become `($1,587.82)`-style (also split), quotes are dropped, the header gains a trailing comma, and dates lose leading zeros. The parser accepts both, and both give the same fingerprints. Still, import the original download, not an Excel-saved copy.
+- **[2026-11-01] Chase CSV format** (real download): `Transaction Date,Post Date,Description,Category,Type,Amount,Memo`. Unix line endings, no quotes, no `$` or thousands commas; charges are negative (e.g. `-8.88`) with Type `Sale`.
 - **[2026-11-01] Pi:** Raspberry Pi 5 running Raspberry Pi OS 64-bit.
 - **[2026-11-01] Off-Pi backups** go to a Mac / Linux machine / NAS, pushed nightly by the Pi with rsync over SSH.
 - **[2026-11-01] Access away from home: not sure yet.** Home network only for now; Tailscale steps are written up as optional (docs/deploy.md §12).

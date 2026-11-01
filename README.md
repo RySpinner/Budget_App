@@ -102,7 +102,7 @@ python -m budget.import_csv --batches                  # past imports
 python -m budget.import_csv --undo 7                   # undo batch 7
 ```
 
-Each card's `parser_key` picks its parser (`citi` is the only one so far). Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
+Each card's `parser_key` picks its parser: `citi` or `chase`. When the Import page can tell from a file's format which single card it belongs to, it picks the card automatically. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
 
 ## Tests
 
@@ -134,7 +134,7 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 ```
 app/           Streamlit app (streamlit_app.py, views/ = one file per page, charts.py, ui.py, auth_gate.py)
 budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions, budgets, reports
-budget/parsers one module per card issuer (citi.py), sharing base.ParsedRow
+budget/parsers one module per card issuer (citi.py, chase.py), sharing base.ParsedRow
 migrations/    versioned schema changes
 seed/          categories.toml (tracked), local.toml (untracked: people and cards)
 config/        secrets.toml (untracked)

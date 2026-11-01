@@ -11,8 +11,8 @@ name = "Partner A"
 name = "Partner B"
 
 # One entry per credit card. Only the last 4 digits, never the full number.
-# parser_key names the parser module for this card's CSV export (the parsers
-# arrive in Phase 2; the issuers are still OPEN).
+# parser_key names the parser for this card's CSV export.
+# Available: "citi", "chase". Several cards from one bank can share a parser.
 [[card]]
 display_name = "Partner A - Example Visa"
 issuer = "Example Bank"
