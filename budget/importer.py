@@ -23,6 +23,7 @@ from budget.config import archive_dir
 from budget.merchant import clean_merchant
 from budget.parsers import PARSERS, get_parser
 from budget.parsers.base import ParsedRow
+from budget.rules import Rule, first_match, load_rules
 
 
 @dataclass
@@ -30,6 +31,7 @@ class NewRow:
     parsed: ParsedRow
     fingerprint: str
     merchant: str
+    rule: Rule | None = None   # the categorization rule that matched, if any
 
 
 @dataclass
@@ -48,8 +50,7 @@ class ImportPreview:
 
     @property
     def uncategorized_count(self) -> int:
-        # The rules engine arrives in Phase 4; until then every new row is uncategorized.
-        return len(self.new_rows)
+        return sum(1 for n in self.new_rows if n.rule is None)
 
 
 def normalize_description(text: str) -> str:
@@ -121,10 +122,12 @@ def preview_import(conn: psycopg.Connection, card_id: int, filename: str, data: 
     kept = [r for r in parsed if r.kind != "excluded"]
     excluded = [r for r in parsed if r.kind == "excluded"]
 
-    candidates = [
-        NewRow(parsed=row, fingerprint=fp, merchant=clean_merchant(row.raw_description))
-        for row, fp in fingerprint_rows(card_id, kept)
-    ]
+    rules = load_rules(conn)
+    candidates = []
+    for row, fp in fingerprint_rows(card_id, kept):
+        rule = first_match(rules, row.raw_description, card_id, row.amount_cents)
+        merchant = rule.merchant_name if rule and rule.merchant_name else clean_merchant(row.raw_description)
+        candidates.append(NewRow(parsed=row, fingerprint=fp, merchant=merchant, rule=rule))
     existing = {
         r[0]
         for r in conn.execute(
@@ -180,12 +183,17 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
                 """
                 INSERT INTO transactions
                     (source, card_id, txn_date, posted_date, amount_cents, raw_description, merchant,
+                     category_id, category_source, rule_id,
                      purchaser_id, fingerprint, import_batch_id, raw_row)
-                VALUES ('card', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES ('card', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (fingerprint) DO NOTHING
                 """,
                 (preview.card_id, row.txn_date, row.posted_date, row.amount_cents, row.raw_description,
-                 new.merchant, preview.purchaser_id, new.fingerprint, batch_id, json.dumps(row.raw_row)),
+                 new.merchant,
+                 new.rule.category_id if new.rule else None,
+                 "rule" if new.rule else None,
+                 new.rule.id if new.rule else None,
+                 preview.purchaser_id, new.fingerprint, batch_id, json.dumps(row.raw_row)),
             )
             inserted += cur.rowcount
 

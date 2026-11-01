@@ -2,7 +2,7 @@
 
 Python + Streamlit + PostgreSQL, running on a Raspberry Pi. See `SPEC.md` for requirements and `CLAUDE.md` for working rules.
 
-**Status:** Phases 1–3 are done: schema and seed data, the Citi parser and import pipeline, and the Import page. Later phases are listed in SPEC.md section 10.
+**Status:** Phases 1–4 are done: schema and seed data, the Citi parser and import pipeline, the Import page, and categorization rules with the Review and Rules pages. Later phases are listed in SPEC.md section 10.
 
 ## Setup
 
@@ -55,6 +55,11 @@ streamlit run app/streamlit_app.py
 
 Then open http://localhost:8501. The **Import** page takes CSV uploads (drag and drop, several at once). It picks the card when only one active card's parser can read the file, shows a preview (new / duplicate / excluded), and writes nothing until you click Import. Past imports are listed below it, with undo.
 
+- **Review** lists uncategorized transactions. Pick a category for any row; tick *Save as rule* to also create a rule (pre-filled pattern, editable) that categorizes matching rows from now on.
+- **Rules** lists every rule with how many transactions it currently covers. Edit, deactivate or delete rules, or add new ones, then re-run them. Rules are tried by priority (lower first) and the first match wins. Rules never change a category you chose by hand.
+
+Rules also run automatically on new rows during import; the preview shows which category each row will get. To re-run all rules from the command line: `python -m budget.rules`.
+
 ## Importing from the command line
 
 ```bash
@@ -89,7 +94,7 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 
 ```
 app/           Streamlit app (streamlit_app.py + pages/)
-budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv
+budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories
 budget/parsers one module per card issuer (citi.py), sharing base.ParsedRow
 migrations/    versioned schema changes
 seed/          categories.toml (tracked), local.toml (untracked: people and cards)

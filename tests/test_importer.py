@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from budget.importer import commit_import, detect_card, preview_import, undo_import
+from budget.rules import create_rule
 
 FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "sample.csv"
 
@@ -130,3 +131,22 @@ def test_detect_card_ignores_masked_number(conn, citi_card):
 
 def test_detect_card_unreadable_file(conn, citi_card):
     assert detect_card(conn, b"Date,Amount\n01/01/2026,1.00\n") is None
+
+
+def test_rules_apply_during_import(conn, citi_card, tmp_path):
+    top = conn.execute("INSERT INTO categories (name) VALUES ('Imp Top') RETURNING id").fetchone()[0]
+    coffee = conn.execute("INSERT INTO categories (name, parent_id) VALUES ('Imp Coffee', %s) RETURNING id", (top,)).fetchone()[0]
+    rule_id = create_rule(conn, "coffee roasters", coffee, merchant_name="Fake Coffee")
+
+    p = preview_import(conn, citi_card["card"], "sample.csv", FIXTURE.read_bytes())
+    assert p.uncategorized_count == 3
+    matched = [n for n in p.new_rows if n.rule]
+    assert [n.merchant for n in matched] == ["Fake Coffee", "Fake Coffee"]
+
+    batch = commit_import(conn, p, archive=tmp_path)
+    rows = conn.execute(
+        "SELECT category_id, category_source, rule_id, merchant FROM transactions "
+        "WHERE import_batch_id = %s AND rule_id IS NOT NULL",
+        (batch,),
+    ).fetchall()
+    assert rows == [(coffee, "rule", rule_id, "Fake Coffee")] * 2

@@ -16,6 +16,8 @@ st.set_page_config(page_title="Household Spending", page_icon=":material/payment
 
 pages = [
     st.Page("pages/import_page.py", title="Import", icon=":material/upload_file:", default=True),
-    # Review, Transactions, Dashboard and Settings arrive in later phases.
+    st.Page("pages/review_page.py", title="Review", icon=":material/checklist:", url_path="review"),
+    st.Page("pages/rules_page.py", title="Rules", icon=":material/rule:", url_path="rules"),
+    # Transactions, Dashboard and Settings arrive in later phases.
 ]
 st.navigation(pages).run()

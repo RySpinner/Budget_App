@@ -7,6 +7,7 @@ the page. Nothing is written to the database until "Import" is clicked.
 import pandas as pd
 import streamlit as st
 
+from budget.categories import subcategory_choices
 from budget.db import connect
 from budget.importer import commit_import, detect_card, preview_import, undo_import
 from budget.money import format_cents
@@ -28,6 +29,7 @@ try:
         cards = conn.execute(
             "SELECT id, display_name FROM cards WHERE active ORDER BY display_name"
         ).fetchall()
+        category_names = subcategory_choices(conn, include_inactive=True)
 except Exception as e:  # e.g. database not reachable
     st.error(f"Could not connect to the database: {e}")
     st.stop()
@@ -40,7 +42,10 @@ if not cards:
 
 
 def rows_table(rows) -> pd.DataFrame:
-    """Rows for display. Amounts are shown as text, so no floats are involved."""
+    """Rows for display. Amounts are shown as text, so no floats are involved.
+
+    `rows` holds (ParsedRow, merchant, matching rule or None).
+    """
     return pd.DataFrame(
         [
             {
@@ -48,9 +53,10 @@ def rows_table(rows) -> pd.DataFrame:
                 "Amount": format_cents(r.amount_cents),
                 "Merchant": merchant,
                 "Type": r.exclude_reason or r.kind,
+                "Category (from rules)": category_names.get(rule.category_id) if rule else "",
                 "Bank description": r.raw_description,
             }
-            for r, merchant in rows
+            for r, merchant, rule in rows
         ]
     )
 
@@ -110,7 +116,7 @@ for f in uploaded or []:
         if preview.new_rows:
             st.markdown("**New rows**")
             st.dataframe(
-                rows_table([(n.parsed, n.merchant) for n in preview.new_rows]),
+                rows_table([(n.parsed, n.merchant, n.rule) for n in preview.new_rows]),
                 hide_index=True, width="stretch",
             )
         else:
@@ -118,11 +124,11 @@ for f in uploaded or []:
 
         if preview.excluded_rows:
             with st.expander(f"Excluded rows ({len(preview.excluded_rows)}): not recorded as spending"):
-                st.dataframe(rows_table([(r, "") for r in preview.excluded_rows]), hide_index=True, width="stretch")
+                st.dataframe(rows_table([(r, "", None) for r in preview.excluded_rows]), hide_index=True, width="stretch")
         if preview.duplicate_rows:
             with st.expander(f"Duplicate rows ({len(preview.duplicate_rows)}): already in the database"):
                 st.dataframe(
-                    rows_table([(n.parsed, n.merchant) for n in preview.duplicate_rows]),
+                    rows_table([(n.parsed, n.merchant, None) for n in preview.duplicate_rows]),
                     hide_index=True, width="stretch",
                 )
 
