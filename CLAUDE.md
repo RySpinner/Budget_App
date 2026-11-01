@@ -20,10 +20,12 @@ Household spending tracker: Python + Streamlit app with a PostgreSQL backend on 
 - Never commit credentials, real CSV exports, or database dumps. Test fixtures use fake amounts and merchants.
 
 ## Environment
-- Database host / name / user: TODO (fill in once set up; real credentials go in an untracked secrets file).
-- Pi model and OS: TODO.
+- Database (Pi): host `localhost`, database `household_budget`, user `budget_app`. Real credentials live only in the untracked `config/secrets.toml` and `~budget/.pgpass`.
+- Pi: Raspberry Pi 5, Raspberry Pi OS 64-bit. Setup steps in `docs/deploy.md`; app in `/opt/household-budget` as the `budget` system user.
+- Backups: nightly `deploy/backup.sh`, pushed with rsync over SSH to the owner's Mac / Linux machine / NAS.
 - Dev laptop: Windows (PowerShell). Give Windows and Mac/Linux variants for any commands in docs.
 
 ## Conventions
 - Each card issuer's parser lives in its own module with a shared interface and its own test.
+- Page files live in `app/views/`, NOT `app/pages/`: Streamlit auto-lists a `pages/` folder, which would bypass the login gate.
 - Prefer clear, readable code over clever code; the owner should be able to follow it.

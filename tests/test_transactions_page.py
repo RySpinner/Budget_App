@@ -10,7 +10,7 @@ from streamlit.testing.v1 import AppTest
 from budget.importer import commit_import, preview_import
 from budget.seed import CATEGORIES_FILE, load_toml, seed_categories
 
-PAGE = str(Path(__file__).resolve().parent.parent / "app" / "pages" / "transactions_page.py")
+PAGE = str(Path(__file__).resolve().parent.parent / "app" / "views" / "transactions_page.py")
 FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "sample.csv"
 
 

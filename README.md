@@ -2,7 +2,7 @@
 
 Python + Streamlit + PostgreSQL, running on a Raspberry Pi. See `SPEC.md` for requirements and `CLAUDE.md` for working rules.
 
-**Status:** Phases 1–6 are done: schema and seed data, the Citi parser and import pipeline, the Import page, categorization rules (Review and Rules pages), the Transactions page, and budgets with the Dashboard. Later phases are listed in SPEC.md section 10.
+**Status:** Phases 1–7 are done: schema and seed data, the Citi parser and import pipeline, the Import page, categorization rules (Review and Rules pages), the Transactions page, budgets with the Dashboard, and deployment on the Pi (service, password, backups). **To install on the Pi, follow [docs/deploy.md](docs/deploy.md).** Later phases are listed in SPEC.md section 10.
 
 ## Setup
 
@@ -74,6 +74,13 @@ python -m budget.seed               # add missing categories, people, cards (saf
 streamlit run app/streamlit_app.py
 ```
 
+The app asks for a shared password. Set one with `python -m budget.auth` and paste the `[app]` lines it prints into `config/secrets.toml`. On a development laptop you can turn the check off instead by adding this to `config/secrets.toml`:
+```toml
+[app]
+require_password = false
+```
+Never use that on the Pi.
+
 Then open http://localhost:8501. Pages:
 
 - **Dashboard** (start page) shows the month's spending against budget pace for each category. Pace = budget × day of month ÷ days in month. It also shows the last 12 months by category and a drill-down from one category to its subcategories. Every chart has a table.
@@ -125,11 +132,13 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 ## Layout
 
 ```
-app/           Streamlit app (streamlit_app.py, pages/, charts.py, ui.py)
+app/           Streamlit app (streamlit_app.py, views/ = one file per page, charts.py, ui.py, auth_gate.py)
 budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions, budgets, reports
 budget/parsers one module per card issuer (citi.py), sharing base.ParsedRow
 migrations/    versioned schema changes
 seed/          categories.toml (tracked), local.toml (untracked: people and cards)
 config/        secrets.toml (untracked)
+deploy/        Pi files: systemd service + backup timer, backup / restore / restore-test scripts
+docs/          deploy.md (Pi setup guide), sessions/ (build session notes)
 tests/         pytest suite; fixtures use fake data only
 ```

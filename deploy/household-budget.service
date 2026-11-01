@@ -1,0 +1,22 @@
+# The web app, started at boot.  Install with:
+#   sudo cp deploy/household-budget.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now household-budget
+[Unit]
+Description=Household spending tracker (Streamlit app)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=budget
+Group=budget
+WorkingDirectory=/opt/household-budget
+ExecStart=/opt/household-budget/.venv/bin/streamlit run app/streamlit_app.py
+Restart=on-failure
+RestartSec=5
+# Basic hardening: no privilege escalation, read-only system folders.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -12,7 +12,7 @@ from streamlit.testing.v1 import AppTest
 
 from budget.importer import commit_import, preview_import
 
-PAGE = str(Path(__file__).resolve().parent.parent / "app" / "pages" / "import_page.py")
+PAGE = str(Path(__file__).resolve().parent.parent / "app" / "views" / "import_page.py")
 FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "sample.csv"
 
 

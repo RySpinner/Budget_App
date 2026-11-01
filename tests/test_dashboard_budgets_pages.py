@@ -11,7 +11,7 @@ from budget.budgets import set_budget
 from budget.seed import CATEGORIES_FILE, load_toml, seed_categories
 from budget.transactions import add_manual
 
-PAGES = Path(__file__).resolve().parent.parent / "app" / "pages"
+PAGES = Path(__file__).resolve().parent.parent / "app" / "views"
 
 
 @pytest.fixture(scope="module")

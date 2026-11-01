@@ -1,0 +1,8 @@
+# Streamlit server settings (used on the Pi and the laptop).
+[server]
+headless = true
+port = 8501
+address = "0.0.0.0"     # reachable from other devices on the home network
+
+[browser]
+gatherUsageStats = false

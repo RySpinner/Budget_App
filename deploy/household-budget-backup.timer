@@ -1,0 +1,12 @@
+# Runs the backup every night at about 2:30. "Persistent" means a run missed
+# while the Pi was off happens soon after it boots.
+[Unit]
+Description=Nightly backup of the household spending tracker
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

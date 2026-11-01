@@ -11,7 +11,7 @@ from budget.importer import commit_import, preview_import
 from budget.rules import create_rule
 from budget.seed import CATEGORIES_FILE, load_toml, seed_categories
 
-PAGES = Path(__file__).resolve().parent.parent / "app" / "pages"
+PAGES = Path(__file__).resolve().parent.parent / "app" / "views"
 FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "sample.csv"
 
 

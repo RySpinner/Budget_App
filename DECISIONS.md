@@ -89,8 +89,23 @@ changes a requirement). Newest items go at the end of each section.
     - *Known blind spot:* a description whose last comma-separated piece is a short number (e.g. `STORE, 12`) followed by an amount like `345.00` would be misread as `12,345.00`. This is unlikely; revisit if it ever shows up.
 40. **`raw_row` for Citi** keeps the fields exactly as read, under the five column names, plus any overflow in order under `_extra`. Nothing in it is re-joined.
 
+### Deployment (Phase 7)
+41. **Login:**
+    - The password is stored only as a salted PBKDF2 hash (Python standard library).
+    - "Remember me" is a signed token (expiry + HMAC) in a cookie that lasts 30 days. A tiny browser script writes the cookie, because Streamlit can't set cookies itself.
+    - The cookie is readable by page scripts (not HttpOnly). That's acceptable for a home app; the token holds no password and stops working when the password changes.
+    - A wrong password waits 1 second, to slow down guessing.
+42. **The password is required by default.** The app refuses to run without one unless `require_password = false` is set, which is meant only for a development laptop.
+43. **Page files moved from `app/pages/` to `app/views/`.** Streamlit automatically lists a `pages/` folder before the login check runs, which let logged-out visitors open pages. A browser test confirms every page URL now shows only the login screen.
+44. **Backup retention:**
+    - 14 daily and 12 monthly dumps, on the Pi and mirrored to the remote (`rsync --delete`).
+    - Original CSVs are only ever added to the remote copy, never deleted.
+    - A run fails, so systemd shows it as failed, if the off-Pi copy fails or no destination is set.
+45. **Restore testing is manual** (`restore-test.sh`, suggested every month or two), not on a timer.
+46. **The backup job runs as the `budget` user**, with the database password in `~budget/.pgpass` and its own SSH key. It doesn't run as root.
+47. **Systemd hardening:** `NoNewPrivileges`, `ProtectSystem=full`, `PrivateTmp`. The app binds to `0.0.0.0:8501` (LAN only, behind the router; never port-forwarded).
+
 ### Not yet addressed
-29. **No password on the app yet** (planned for Phase 7). Anyone on the home network can open it while it's running.
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 
 ---
@@ -107,4 +122,8 @@ changes a requirement). Newest items go at the end of each section.
 - **[2026-11-01] Seed warns** when `local.toml` disagrees with an existing card.
 - **[2026-11-01] Citi's real CSV format** (as downloaded, viewed in Notepad): descriptions are quoted, amounts are not. A credit looks like ` -$ 1,878.69`, and its thousands comma splits it across two columns. Handle it in the parser (#39) rather than asking the owner to clean files.
 - **[2026-11-01] Files opened and saved in Excel change format:** amounts become `($1,587.82)`-style (also split), quotes are dropped, the header gains a trailing comma, and dates lose leading zeros. The parser accepts both, and both give the same fingerprints. Still, import the original download, not an Excel-saved copy.
+- **[2026-11-01] Pi:** Raspberry Pi 5 running Raspberry Pi OS 64-bit.
+- **[2026-11-01] Off-Pi backups** go to a Mac / Linux machine / NAS, pushed nightly by the Pi with rsync over SSH.
+- **[2026-11-01] Access away from home: not sure yet.** Home network only for now; Tailscale steps are written up as optional (docs/deploy.md §12).
+- **[2026-11-01] Login is remembered for 30 days** per browser.
 - **[2026-11-01] Citi autopay rows** look like `AUTOPAY <digits>RAUTOPAY AUTO-PMT`, with the amount in Credit as a negative. They're excluded as card payments.

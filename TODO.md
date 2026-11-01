@@ -14,8 +14,8 @@ decisions to reassess are in DECISIONS.md.
 - [ ] **Annual subscriptions:** count in the month charged (what happens now), or spread across 12 months? (SPEC §7, OPEN; DECISIONS.md #31)
 - [ ] **Lumpy expenses** such as car maintenance: a separate budget line, or left out of the monthly pace view? Nothing is left out yet. (SPEC §7, OPEN; DECISIONS.md #31)
 - [ ] **Old spreadsheet history:** import it or not? (SPEC §11)
-- [ ] **Raspberry Pi** model and OS. Also: is access from outside the home needed (Tailscale)? (SPEC §11)
-- [ ] **CLAUDE.md "Environment":** fill in the database host, name and user once settled. Never the password.
+- [ ] **Set up the Pi** following docs/deploy.md: service, password, backups to your Mac/Linux/NAS, and run `restore-test.sh` once.
+- [ ] **Access away from home:** decide whether it's needed. If so, follow the Tailscale section in docs/deploy.md. (SPEC §11)
 - [ ] Look over the **Review** list in DECISIONS.md.
 
 ## Build
@@ -25,7 +25,7 @@ decisions to reassess are in DECISIONS.md.
 - [x] Phase 4: rules engine, Review and Rules pages
 - [x] Phase 5: Transactions page (filters, editing, splits, manual entry)
 - [x] Phase 6: budgets and Dashboard
-- [ ] Phase 7: deployment on the Pi (service, password, backups)
+- [x] Phase 7: deployment on the Pi (service, password, backups). Code and guide done; the owner still does the Pi setup.
 - [ ] Phase 8: IOU ledger; optional history import
 - [ ] Settings page for categories, cards and people. No phase assigned yet; could come with or after Phase 6.
 
