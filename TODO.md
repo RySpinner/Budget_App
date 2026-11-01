@@ -9,7 +9,7 @@ decisions to reassess are in DECISIONS.md.
   - decide how a fee/interest *reversal* is treated. A refund (negative spending) seems likely, since fees count as spending.
   - Also worth a look if any show up in a year of data: "PAYMENT THANK YOU"-style online payments, and rewards/cash-back credits.
 - [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase.
-- [ ] **Chase:** when they turn up, send a real **Return**, **Payment**, **Fee** and **Adjustment** row (fake amounts are fine) to confirm DECISIONS.md #48.
+- [ ] **Chase:** Payment confirmed. When they turn up, send a real **Return**, **Fee** and **Adjustment** row (fake amounts are fine) to confirm DECISIONS.md #48.
 - [ ] *Idea:* use Chase's own Category column to pre-fill suggestions on the Review page (DECISIONS.md #50).
 - [ ] **Category taxonomy:** confirm with your partner (SPEC §4, OPEN).
 - [ ] **Budget amounts**, especially Dining & Going Out (SPEC §4, OPEN). Enter them on the Budgets page.
