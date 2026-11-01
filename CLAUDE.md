@@ -18,6 +18,7 @@ Household spending tracker: Python + Streamlit app with a PostgreSQL backend on 
 ## Environment
 - Database host / name / user: TODO (fill in once set up; real credentials go in an untracked secrets file).
 - Pi model and OS: TODO.
+- Dev laptop: Windows (PowerShell). Give Windows and Mac/Linux variants for any commands in docs.
 
 ## Conventions
 - Each card issuer's parser lives in its own module with a shared interface and its own test.

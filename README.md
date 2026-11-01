@@ -6,14 +6,35 @@ Python + Streamlit + PostgreSQL, running on a Raspberry Pi. See `SPEC.md` for re
 
 ## Setup
 
+Create a virtual environment and install the dependencies. The commands differ by system.
+
+**Windows (PowerShell)**
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy config\secrets.example.toml config\secrets.toml   # then edit: real DB credentials
+copy seed\local.example.toml seed\local.toml           # then edit: real names and cards
+```
+
+If PowerShell refuses to run `Activate.ps1` ("running scripts is disabled"), run this once and then try again:
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+In the older Command Prompt (cmd), activate with `.venv\Scripts\activate.bat` instead.
+
+**Mac / Linux / Raspberry Pi**
+
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 cp config/secrets.example.toml config/secrets.toml   # then edit: real DB credentials
 cp seed/local.example.toml seed/local.toml           # then edit: real names and cards
 ```
 
-Both copied files are gitignored. You can also set `BUDGET_DATABASE_URL` instead of using `secrets.toml`.
+Activate the environment again in each new terminal before running the commands below.
+
+Both copied files are gitignored. You can also set `BUDGET_DATABASE_URL` instead of using `secrets.toml` (PowerShell: `$env:BUDGET_DATABASE_URL = "postgresql://..."`).
 
 ## Database
 
@@ -49,9 +70,20 @@ Each card's `parser_key` picks its parser (`citi` is the only one so far). Re-im
 
 The tests need a Postgres server where they may create a database. They create a throwaway `budget_test_*` database and drop it at the end.
 
+Windows (PowerShell):
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql://postgres@localhost:5432/postgres"
+pytest -q
+```
+
+Mac / Linux:
+
 ```bash
 TEST_DATABASE_URL=postgresql://postgres@localhost:5432/postgres pytest -q
 ```
+
+Use a Postgres user that is allowed to create databases. With the default `postgres` user, add its password to the URL (`postgresql://postgres:PASSWORD@localhost:5432/postgres`).
 
 ## Layout
 
