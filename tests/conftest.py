@@ -16,8 +16,8 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from budget.migrate import apply_migrations
 
 
-@pytest.fixture(scope="session")
-def database_url():
+def _temporary_database():
+    """Create a migrated throwaway database; yields its URL, then drops it."""
     admin_url = os.environ.get("TEST_DATABASE_URL")
     if not admin_url:
         pytest.skip("TEST_DATABASE_URL is not set")
@@ -37,6 +37,18 @@ def database_url():
 
     with psycopg.connect(admin_url, autocommit=True) as admin:
         admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+
+
+@pytest.fixture(scope="session")
+def database_url():
+    """Shared database for tests that roll back their work (see `conn`)."""
+    yield from _temporary_database()
+
+
+@pytest.fixture(scope="module")
+def committed_database_url():
+    """A separate database for tests that must commit, e.g. app page tests."""
+    yield from _temporary_database()
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from budget.importer import commit_import, preview_import, undo_import
+from budget.importer import commit_import, detect_card, preview_import, undo_import
 
 FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "sample.csv"
 
@@ -107,3 +107,26 @@ def test_unknown_parser_key(conn, citi_card):
     conn.execute("UPDATE cards SET parser_key = 'nope' WHERE id = %s", (citi_card["card"],))
     with pytest.raises(ValueError, match="No parser"):
         preview_import(conn, citi_card["card"], "sample.csv", FIXTURE.read_bytes())
+
+
+def test_detect_card_single_match(conn, citi_card):
+    assert detect_card(conn, FIXTURE.read_bytes()) == citi_card["card"]
+
+
+def test_detect_card_two_citi_cards_is_unsure(conn, citi_card):
+    conn.execute(
+        "INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key) "
+        "VALUES ('Other Citi', 'Citi', '5555', %s, 'citi')",
+        (citi_card["person"],),
+    )
+    assert detect_card(conn, FIXTURE.read_bytes()) is None
+
+
+def test_detect_card_ignores_masked_number(conn, citi_card):
+    # The fixture's masked number is 0000; a card with different last4 still matches.
+    conn.execute("UPDATE cards SET last4 = '4321' WHERE id = %s", (citi_card["card"],))
+    assert detect_card(conn, FIXTURE.read_bytes()) == citi_card["card"]
+
+
+def test_detect_card_unreadable_file(conn, citi_card):
+    assert detect_card(conn, b"Date,Amount\n01/01/2026,1.00\n") is None

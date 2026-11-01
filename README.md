@@ -2,7 +2,7 @@
 
 Python + Streamlit + PostgreSQL, running on a Raspberry Pi. See `SPEC.md` for requirements and `CLAUDE.md` for working rules.
 
-**Status:** Phase 1 (schema, migrations, seed data) and Phase 2 (Citi parser, command-line import) are done. Later phases are listed in SPEC.md section 10.
+**Status:** Phases 1–3 are done: schema and seed data, the Citi parser and import pipeline, and the Import page. Later phases are listed in SPEC.md section 10.
 
 ## Setup
 
@@ -26,7 +26,15 @@ python -m budget.seed               # add missing categories, people, cards (saf
 - **Migrations** are numbered SQL files in `migrations/`. Never edit one that has been applied; add a new file instead. The runner wraps each file in a transaction and records it in `schema_migrations`.
 - **Seeding** only inserts rows that are missing (matched by name). It never renames or deletes, so edits made later in the app are safe.
 
-## Importing (command line, until the Import page exists)
+## Running the app
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+Then open http://localhost:8501. The **Import** page takes CSV uploads (drag and drop, several at once). It picks the card when only one active card's parser can read the file, shows a preview (new / duplicate / excluded), and writes nothing until you click Import. Past imports are listed below it, with undo.
+
+## Importing from the command line
 
 ```bash
 python -m budget.import_csv --cards                    # find the card id
@@ -48,6 +56,7 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/postgres pytest -q
 ## Layout
 
 ```
+app/           Streamlit app (streamlit_app.py + pages/)
 budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv
 budget/parsers one module per card issuer (citi.py), sharing base.ParsedRow
 migrations/    versioned schema changes

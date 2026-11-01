@@ -21,7 +21,7 @@ import psycopg
 
 from budget.config import archive_dir
 from budget.merchant import clean_merchant
-from budget.parsers import get_parser
+from budget.parsers import PARSERS, get_parser
 from budget.parsers.base import ParsedRow
 
 
@@ -84,6 +84,29 @@ def decode_csv(data: bytes) -> str:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
         return data.decode("cp1252")  # some banks still export Windows-1252
+
+
+def detect_card(conn: psycopg.Connection, data: bytes) -> int | None:
+    """Guess which active card a file belongs to, or None if unsure.
+
+    A card fits if its parser can read the file. The guess is used only when
+    exactly one active card fits; with two cards from the same bank, the user
+    picks. (Masked card numbers inside descriptions are often per-merchant
+    virtual numbers, so they are not used.)
+    """
+    text = decode_csv(data)
+    readable: dict[str, bool] = {}
+    candidates = []
+    for card_id, parser_key in conn.execute("SELECT id, parser_key FROM cards WHERE active ORDER BY id"):
+        if parser_key not in readable:
+            try:
+                PARSERS[parser_key](text)
+                readable[parser_key] = True
+            except (KeyError, ValueError):
+                readable[parser_key] = False
+        if readable[parser_key]:
+            candidates.append(card_id)
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def preview_import(conn: psycopg.Connection, card_id: int, filename: str, data: bytes) -> ImportPreview:

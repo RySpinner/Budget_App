@@ -25,4 +25,4 @@ subcategories = ["Subscriptions", "Bills", "General"]
 
 [[category]]
 name = "Discretionary"
-subcategories = ["General"]
+subcategories = ["General", "Fees & Interest"]

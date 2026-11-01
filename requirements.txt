@@ -1,2 +1,4 @@
 psycopg[binary]>=3.2,<4
+streamlit>=1.50,<2
+pandas>=2
 pytest>=8

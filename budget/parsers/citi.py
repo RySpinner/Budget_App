@@ -11,6 +11,10 @@ followed by several all-blank rows (",,,,").
   negative here whatever sign Citi writes them with.
 - Status "Pending" rows are excluded; only cleared rows are recorded.
 - Interest and fees count as spending (not excluded).
+- The "XXXXXXXXXXXX1234" at the end of a description is usually a virtual card
+  number that differs by merchant, NOT the card's real last 4, so it is not
+  used to identify the card. It stays in raw_description; merchant cleanup
+  strips it from the display name.
 - TODO (SPEC section 11, "Credits"): the payment patterns below are guesses;
   check them against real Citi payment and refund rows.
 """

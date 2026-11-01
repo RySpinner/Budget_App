@@ -61,3 +61,4 @@ def test_bad_row_reports_line_number():
     text = "Status,Date,Description,Debit,Credit\nCleared,13/45/2026,X,$1.00,\n"
     with pytest.raises(ValueError, match="Line 2"):
         citi.parse(text)
+
