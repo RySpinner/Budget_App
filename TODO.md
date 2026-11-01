@@ -4,9 +4,10 @@ Reminders and open items. Requirements questions also live in SPEC.md section 11
 decisions to reassess are in DECISIONS.md.
 
 ## Reminders for the owner
-- [ ] **Credits.** Get a real Citi **payment** row and a real **refund** row (fake the amounts and merchants if you like). Use them to:
-  - check the parser's exclusion patterns (DECISIONS.md #12);
+- [ ] **Credits.** A real **payment** row is confirmed and handled (AUTOPAY). Still needed: a real **refund** row (fake the amount and merchant if you like). Use it to:
+  - check refunds come through as negative spending (DECISIONS.md #12);
   - decide how a fee/interest *reversal* is treated. A refund (negative spending) seems likely, since fees count as spending.
+  - Also worth a look if any show up in a year of data: "PAYMENT THANK YOU"-style online payments, and rewards/cash-back credits.
 - [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer.
 - [ ] **Category taxonomy:** confirm with your partner (SPEC §4, OPEN).
 - [ ] **Budget amounts**, especially Dining & Going Out (SPEC §4, OPEN). Enter them on the Budgets page.

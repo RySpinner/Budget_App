@@ -33,7 +33,7 @@ changes a requirement). Newest items go at the end of each section.
 9. **Excluded rows are not stored as transactions.** Only their count is saved, in `import_batches.rows_excluded`. The rows themselves survive only in the archived CSV.
 10. **Citi's single `Date` column is treated as the transaction date.** `posted_date` stays NULL for Citi rows.
 11. **Every Citi Credit becomes a negative amount,** whatever sign Citi uses.
-12. **Citi exclusion patterns are guesses.** Payments match `AUTOPAY`, `AUTO-PMT`, or `PAYMENT … THANK YOU`; then `BALANCE TRANSFER`, then rewards wording. Pending rows (Status = Pending) are excluded. Not yet checked against real payment or refund rows (see TODO.md, "Credits").
+12. **Citi exclusion patterns:** payments match `AUTOPAY`, `AUTO-PMT`, or `PAYMENT … THANK YOU`; then `BALANCE TRANSFER`, then rewards wording. Pending rows (Status = Pending) are excluded. The AUTOPAY pattern is confirmed by a real row; the others, and the refund format, are still guesses (see TODO.md, "Credits").
 13. **Merchant cleanup:**
     - strips processor prefixes (`SQ *`, `TST*`, …), masked card numbers, `null`, and trailing numbers and state codes;
     - removes `#1234` store numbers;
@@ -79,6 +79,16 @@ changes a requirement). Newest items go at the end of each section.
 37. **Budget changes apply "from month X onward"** and can be set for any month from 12 back to 12 ahead. Deleting a history row makes the previous amount apply again.
 38. **The Dashboard is the app's start page.** Import moved to `/import`.
 
+### Citi parsing fixes
+39. **Reading Citi's unquoted CSV:** each row is read from both ends.
+    - Status and date come from the left.
+    - The amount comes from the right, gluing split thousands groups back on: `($1)` + `587.82` becomes $1,587.82.
+    - An empty field just before the amount means it was in the Credit column.
+    - Everything in between is the description, so commas inside descriptions also work.
+    - Parentheses or a minus sign mean negative.
+    - *Known blind spot:* a description whose last comma-separated piece is a short number (e.g. `STORE, 12`) followed by an amount like `345.00` would be misread as `12,345.00`. This is unlikely; revisit if it ever shows up.
+40. **`raw_row` for Citi** keeps the fields exactly as read, under the five column names, plus any overflow in order under `_extra`. Nothing in it is re-joined.
+
 ### Not yet addressed
 29. **No password on the app yet** (planned for Phase 7). Anyone on the home network can open it while it's running.
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
@@ -95,3 +105,5 @@ changes a requirement). Newest items go at the end of each section.
 - **[2026-11-01] The trailing blank rows in the Citi sample** came from hand-editing the file. The parser skips blank rows anywhere anyway.
 - **[2026-11-01] Development laptop is Windows (PowerShell).** Docs give Windows and Mac/Linux commands.
 - **[2026-11-01] Seed warns** when `local.toml` disagrees with an existing card.
+- **[2026-11-01] Citi exports are malformed CSV** (seen in a real year-long export, downloaded straight from Citi): fields aren't quoted, so a payment such as `($1,587.82)` arrives split across two columns, and the header can end with an extra comma. Handle it in the parser (DECISIONS #39) rather than asking the owner to clean files.
+- **[2026-11-01] Citi autopay rows** look like `AUTOPAY <digits>RAUTOPAY AUTO-PMT`, with the amount in Credit as a negative in parentheses. They're excluded as card payments.

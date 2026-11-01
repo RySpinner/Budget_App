@@ -62,3 +62,60 @@ def test_bad_row_reports_line_number():
     with pytest.raises(ValueError, match="Line 2"):
         citi.parse(text)
 
+
+
+# ---- unquoted commas (seen in a real export) --------------------------------
+
+SPLIT_FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "split_amounts.csv"
+
+
+@pytest.fixture
+def split_rows():
+    return citi.parse(SPLIT_FIXTURE.read_text())
+
+
+def test_trailing_comma_header_accepted(split_rows):
+    assert len(split_rows) == 5
+
+
+def test_normal_row_with_extra_blank_column(split_rows):
+    r = split_rows[0]
+    assert (r.kind, r.amount_cents) == ("purchase", 3864)
+
+
+def test_payment_split_across_columns(split_rows):
+    r = split_rows[1]
+    assert (r.kind, r.exclude_reason, r.amount_cents) == ("excluded", "card payment", -123456)
+    assert r.raw_description == "AUTOPAY 000000000000000RAUTOPAY AUTO-PMT"
+    # The original pieces are kept as read.
+    assert r.raw_row["Credit"] == "($1)"
+    assert r.raw_row["_extra"] == ["234.56"]
+
+
+def test_debit_split_across_columns(split_rows):
+    r = split_rows[2]
+    assert (r.kind, r.amount_cents) == ("purchase", 234567)
+    assert r.raw_description == "FAKE FURNITURE STORE null XXXXXXXXXXXX0000"
+
+
+def test_comma_inside_description(split_rows):
+    purchase, refund = split_rows[3], split_rows[4]
+    assert (purchase.raw_description, purchase.amount_cents) == ("FAKE STORE, INC null XXXXXXXXXXXX0000", 1200)
+    assert (refund.kind, refund.raw_description, refund.amount_cents) == (
+        "refund", "FAKE STORE, INC RETURN null XXXXXXXXXXXX0000", -1200)
+
+
+@pytest.mark.parametrize("line, cents", [
+    ("Cleared,01/02/2026,X,,($1,587.82)", -158782),     # if Citi ever keeps the parentheses together
+    ("Cleared,01/02/2026,X,,-1,587.82", -158782),
+    ("Cleared,01/02/2026,X,$12,345,678.90,", 1234567890),
+    ("Cleared,01/02/2026,X,,$5.00", -500),
+])
+def test_amount_shapes(line, cents):
+    [row] = citi.parse("Status,Date,Description,Debit,Credit\n" + line + "\n")
+    assert row.amount_cents == cents
+
+
+def test_garbage_amount_rejected():
+    with pytest.raises(ValueError, match="Line 2"):
+        citi.parse("Status,Date,Description,Debit,Credit\nCleared,01/02/2026,X,abc,\n")
