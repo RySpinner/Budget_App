@@ -82,7 +82,7 @@ changes a requirement). Newest items go at the end of each section.
 ### Citi parsing fixes
 39. **Reading Citi's unquoted CSV:** each row is read from both ends.
     - Status and date come from the left.
-    - The amount comes from the right, gluing split thousands groups back on: `($1)` + `587.82` becomes $1,587.82.
+    - The amount comes from the right, gluing split thousands groups back on: ` -$ 1` + `878.69` becomes −$1,878.69, and the Excel version `($1)` + `587.82` becomes −$1,587.82.
     - An empty field just before the amount means it was in the Credit column.
     - Everything in between is the description, so commas inside descriptions also work.
     - Parentheses or a minus sign mean negative.
@@ -105,5 +105,6 @@ changes a requirement). Newest items go at the end of each section.
 - **[2026-11-01] The trailing blank rows in the Citi sample** came from hand-editing the file. The parser skips blank rows anywhere anyway.
 - **[2026-11-01] Development laptop is Windows (PowerShell).** Docs give Windows and Mac/Linux commands.
 - **[2026-11-01] Seed warns** when `local.toml` disagrees with an existing card.
-- **[2026-11-01] Citi exports are malformed CSV** (seen in a real year-long export, downloaded straight from Citi): fields aren't quoted, so a payment such as `($1,587.82)` arrives split across two columns, and the header can end with an extra comma. Handle it in the parser (DECISIONS #39) rather than asking the owner to clean files.
-- **[2026-11-01] Citi autopay rows** look like `AUTOPAY <digits>RAUTOPAY AUTO-PMT`, with the amount in Credit as a negative in parentheses. They're excluded as card payments.
+- **[2026-11-01] Citi's real CSV format** (as downloaded, viewed in Notepad): descriptions are quoted, amounts are not. A credit looks like ` -$ 1,878.69`, and its thousands comma splits it across two columns. Handle it in the parser (#39) rather than asking the owner to clean files.
+- **[2026-11-01] Files opened and saved in Excel change format:** amounts become `($1,587.82)`-style (also split), quotes are dropped, the header gains a trailing comma, and dates lose leading zeros. The parser accepts both, and both give the same fingerprints. Still, import the original download, not an Excel-saved copy.
+- **[2026-11-01] Citi autopay rows** look like `AUTOPAY <digits>RAUTOPAY AUTO-PMT`, with the amount in Credit as a negative. They're excluded as card payments.

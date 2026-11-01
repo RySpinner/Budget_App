@@ -6,12 +6,15 @@ Format (seen in real exports):
 followed by several all-blank rows (",,,,"). Some exports end the header
 with an extra comma, giving a blank sixth column.
 
-Citi does NOT quote its fields, so a comma inside a value splits it across
-columns. Seen in a real export: a payment of ($1,587.82) arrived as
+Citi quotes the description but NOT the amount, so the thousands comma in a
+large amount splits it across two columns. A real download (as seen in Notepad):
+    Cleared,10/01/2026,"AUTOPAY ...AUTO-PMT",, -$ 1,878.69
+The same file after being opened and saved in Excel looks different again:
     Cleared,9/1/2026,AUTOPAY ...AUTO-PMT,,($1),587.82
-To cope, each row is read from both ends (see _split_row): status and date
-from the left, the amount from the right (re-joining thousands groups), and
-everything in between is the description.
+Both are handled. Each row is read from both ends (see _split_row): status and
+date from the left, the amount from the right (re-joining thousands groups),
+and everything in between is the description. Both versions of a file give the
+same fingerprints, so importing both doesn't create duplicates.
 
 - Date is MM/DD/YYYY. Citi gives only one date, which we treat as the
   transaction date (posted_date stays NULL).
@@ -45,9 +48,9 @@ EXCLUDE_PATTERNS = [
     (re.compile(r"\b(CASH REWARD|REWARDS? REDEMPTION|THANKYOU POINTS)\b", re.I), "rewards redemption"),
 ]
 
-# The start of a money amount that may continue in the next column, e.g. "$1", "($1)", "-1".
+# The start of a money amount that may continue in the next column, e.g. " -$ 1", "$2", "($1)".
 AMOUNT_START = re.compile(r"^[\s(\-$]*\d{1,3}\)?\s*$")
-# A thousands group that was split off by a comma, e.g. "587.82", "023.99 ", "587.82)".
+# A thousands group that was split off by a comma, e.g. "878.69", "345.67 ", "587.82)".
 THOUSANDS_GROUP = re.compile(r"^\d{3}(\.\d{1,2})?\)?\s*$")
 
 

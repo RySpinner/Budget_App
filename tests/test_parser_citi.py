@@ -119,3 +119,32 @@ def test_amount_shapes(line, cents):
 def test_garbage_amount_rejected():
     with pytest.raises(ValueError, match="Line 2"):
         citi.parse("Status,Date,Description,Debit,Credit\nCleared,01/02/2026,X,abc,\n")
+
+
+# ---- Citi's own format, as downloaded (never opened in Excel) ---------------
+# Descriptions are quoted; amounts are not, and credits look like " -$ 1,234.56".
+
+RAW_FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "raw_download.csv"
+
+
+def test_raw_download_format():
+    rows = citi.parse(RAW_FIXTURE.read_text())
+    assert [(r.kind, r.exclude_reason, r.amount_cents) for r in rows] == [
+        ("purchase", None, 3864),
+        ("excluded", "card payment", -123456),
+        ("purchase", None, 234567),
+        ("refund", None, -1525),
+    ]
+    assert rows[2].raw_description == "FAKE FURNITURE STORE, INC null XXXXXXXXXXXX0000"
+
+
+def test_excel_saved_and_raw_versions_dedup_to_the_same_fingerprint():
+    """Importing a file and an Excel-saved copy of it must not create duplicates."""
+    from budget.importer import fingerprint_rows
+    raw = citi.parse("Status,Date,Description,Debit,Credit\n"
+                     'Cleared,10/01/2026,"AUTOPAY X AUTO-PMT",, -$ 1,234.56\n'
+                     'Cleared,10/02/2026,"FAKE SHOP",$5.00 ,\n')
+    excel = citi.parse("Status,Date,Description,Debit,Credit,\n"
+                       "Cleared,10/1/2026,AUTOPAY X AUTO-PMT,,($1),234.56\n"
+                       "Cleared,10/2/2026,FAKE SHOP,$5.00 ,,\n")
+    assert [fp for _, fp in fingerprint_rows(1, raw)] == [fp for _, fp in fingerprint_rows(1, excel)]
