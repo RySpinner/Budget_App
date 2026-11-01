@@ -107,7 +107,7 @@ Original CSV files are copied to an archive directory on the Pi, named by batch 
 ## 5. Import pipeline
 
 1. User uploads one or more CSVs on the Import page and picks (or the app detects) which card each belongs to.
-2. The card's parser converts each row to the standard record and classifies it as: purchase, refund, or excluded (card payment, balance transfer, rewards redemption, interest/fee adjustments, pending/unposted rows). Each parser handles its own bank's sign convention, date format, and column names.
+2. The card's parser converts each row to the standard record and classifies it as: purchase, refund, or excluded (card payment, balance transfer, rewards redemption, pending/unposted rows). Interest and fees count as spending (decided 2026-11-01). Each parser handles its own bank's sign convention, date format, and column names.
 3. **Deduplication:** fingerprint = hash of `card_id`, dates, `amount_cents`, normalized `raw_description`, and an occurrence index. The occurrence index distinguishes legitimate identical charges (two same-price coffees on one day): the nth identical row in a file gets index n. Insert with `ON CONFLICT (fingerprint) DO NOTHING`, so overlapping imports are harmless.
 4. Merchant cleanup: generic cleanup (strip processor prefixes like `SQ *`, `TST*`, trailing store numbers) then rule-provided names.
 5. Categorization rules run on new rows (see section 6).
@@ -169,7 +169,8 @@ Access control: a simple shared password on the app, since anyone on the home ne
 
 ## 11. Open questions (summary)
 
-- Card issuers and sample CSVs for each.
+- Card issuers and sample CSVs for each. (Citi done.)
+- **Credits (reminder):** confirm how each issuer shows refunds vs. card payments (need a real example row of each), and how a fee/interest reversal should be treated: as a refund (likely, since fees count as spending) or excluded.
 - Final category taxonomy (both partners).
 - Budget amounts, especially dining.
 - Annual subscriptions: month charged vs. spread across the year.

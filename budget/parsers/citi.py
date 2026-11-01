@@ -10,6 +10,9 @@ followed by several all-blank rows (",,,,").
 - Charges are in Debit; payments and refunds are in Credit. Credits are made
   negative here whatever sign Citi writes them with.
 - Status "Pending" rows are excluded; only cleared rows are recorded.
+- Interest and fees count as spending (not excluded).
+- TODO (SPEC section 11, "Credits"): the payment patterns below are guesses;
+  check them against real Citi payment and refund rows.
 """
 
 import csv
