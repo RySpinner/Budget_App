@@ -1,0 +1,28 @@
+# Starting category taxonomy (SPEC.md section 4).
+# Still OPEN: confirm with both partners. The seed only ADDS categories that
+# are missing; it never renames, reorders, or deletes existing ones, so later
+# edits made in the app are safe. Every top-level category gets a "General"
+# subcategory (added automatically if you leave it out).
+#
+# List order = sort_order.
+
+[[category]]
+name = "Transportation"
+subcategories = ["Fuel", "Tolls & parking", "Maintenance & parts", "General"]
+
+[[category]]
+name = "Groceries & Household"
+# "General" is the default for any supermarket / Costco / Walmart run.
+subcategories = ["General", "Groceries", "Household goods", "Personal care"]
+
+[[category]]
+name = "Dining & Going Out"
+subcategories = ["Restaurants", "Fast food", "Coffee", "Bars & entertainment", "General"]
+
+[[category]]
+name = "Recurring"
+subcategories = ["Subscriptions", "Bills", "General"]
+
+[[category]]
+name = "Discretionary"
+subcategories = ["General"]

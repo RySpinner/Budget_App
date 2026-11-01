@@ -1,0 +1,28 @@
+# Copy this file to seed/local.toml (which is gitignored) and fill in real
+# values. It holds personal details, so it stays out of git.
+#
+#   cp seed/local.example.toml seed/local.toml
+#   python -m budget.seed
+
+[[person]]
+name = "Partner A"
+
+[[person]]
+name = "Partner B"
+
+# One entry per credit card. Only the last 4 digits, never the full number.
+# parser_key names the parser module for this card's CSV export (the parsers
+# arrive in Phase 2; the issuers are still OPEN).
+[[card]]
+display_name = "Partner A - Example Visa"
+issuer = "Example Bank"
+last4 = "0000"
+owner = "Partner A"        # must match a person name above
+parser_key = "example_bank"
+
+[[card]]
+display_name = "Partner B - Example Mastercard"
+issuer = "Other Bank"
+last4 = "1111"
+owner = "Partner B"
+parser_key = "other_bank"

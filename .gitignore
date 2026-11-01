@@ -1,0 +1,20 @@
+# Credentials and personal seed data
+config/secrets.toml
+seed/local.toml
+.streamlit/secrets.toml
+
+# Real bank data and database dumps: never commit
+*.csv
+!tests/fixtures/**/*.csv
+archive/
+*.dump
+*.sql.gz
+*.backup
+backups/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
