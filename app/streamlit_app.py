@@ -15,10 +15,12 @@ import streamlit as st  # noqa: E402
 st.set_page_config(page_title="Household Spending", page_icon=":material/payments:", layout="wide")
 
 pages = [
-    st.Page("pages/import_page.py", title="Import", icon=":material/upload_file:", default=True),
+    st.Page("pages/dashboard_page.py", title="Dashboard", icon=":material/dashboard:", default=True),
+    st.Page("pages/import_page.py", title="Import", icon=":material/upload_file:", url_path="import"),
     st.Page("pages/review_page.py", title="Review", icon=":material/checklist:", url_path="review"),
     st.Page("pages/transactions_page.py", title="Transactions", icon=":material/receipt_long:", url_path="transactions"),
+    st.Page("pages/budgets_page.py", title="Budgets", icon=":material/savings:", url_path="budgets"),
     st.Page("pages/rules_page.py", title="Rules", icon=":material/rule:", url_path="rules"),
-    # Dashboard and Settings arrive in later phases.
+    # A Settings page (categories, cards, people) has no phase yet; see TODO.md.
 ]
 st.navigation(pages).run()

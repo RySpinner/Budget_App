@@ -2,7 +2,7 @@
 
 Python + Streamlit + PostgreSQL, running on a Raspberry Pi. See `SPEC.md` for requirements and `CLAUDE.md` for working rules.
 
-**Status:** Phases 1–5 are done: schema and seed data, the Citi parser and import pipeline, the Import page, categorization rules (Review and Rules pages), and the Transactions page. Later phases are listed in SPEC.md section 10.
+**Status:** Phases 1–6 are done: schema and seed data, the Citi parser and import pipeline, the Import page, categorization rules (Review and Rules pages), the Transactions page, and budgets with the Dashboard. Later phases are listed in SPEC.md section 10.
 
 ## Setup
 
@@ -63,7 +63,7 @@ python -m budget.migrate --status   # show applied / pending
 python -m budget.seed               # add missing categories, people, cards (safe to re-run)
 ```
 
-- After pulling new code, run `python -m budget.migrate` again: it applies any new migrations (e.g. `0002_spending_lines.sql`) and skips ones already applied.
+- After pulling new code, run `python -m budget.migrate` again: it applies any new migrations (e.g. `0003_monthly_totals.sql`) and skips ones already applied.
 - **Migrations** are numbered SQL files in `migrations/`. Never edit one that has been applied; add a new file instead. The runner wraps each file in a transaction and records it in `schema_migrations`.
 - **Seeding** only inserts rows that are missing (matched by name). It never renames or deletes, so edits made later in the app are safe. If `local.toml` disagrees with an existing card, it prints a warning; change that card in the database instead, e.g. `UPDATE cards SET parser_key = 'citi' WHERE id = 1;`.
 - **Adding a category:** add it to `seed/categories.toml` and run `python -m budget.seed`. To retire one, set `active = false` in the database rather than deleting it; if you rename one, rename it in the TOML file too.
@@ -74,7 +74,11 @@ python -m budget.seed               # add missing categories, people, cards (saf
 streamlit run app/streamlit_app.py
 ```
 
-Then open http://localhost:8501. The **Import** page takes CSV uploads (drag and drop, several at once). It picks the card when only one active card's parser can read the file, shows a preview (new / duplicate / excluded), and writes nothing until you click Import. Past imports are listed below it, with undo.
+Then open http://localhost:8501. Pages:
+
+- **Dashboard** (start page) shows the month's spending against budget pace for each category. Pace = budget × day of month ÷ days in month. It also shows the last 12 months by category and a drill-down from one category to its subcategories. Every chart has a table.
+- **Budgets:** set each top-level category's monthly amount from a chosen month onward. Earlier months keep their old budget.
+- The **Import** page takes CSV uploads (drag and drop, several at once). It picks the card when only one active card's parser can read the file, shows a preview (new / duplicate / excluded), and writes nothing until you click Import. Past imports are listed below it, with undo.
 
 - **Review** lists uncategorized transactions. Pick a category for any row; tick *Save as rule* to also create a rule (pre-filled pattern, editable) that categorizes matching rows from now on.
 - **Transactions** shows every spending line with filters for month, category, subcategory, card and purchaser. Choosing one top-level category gives the old per-sheet layout: date, amount, running monthly total, merchant, card, budget-to-date, note, purchaser. Edit category, note and purchaser in the table and press Save. Below the table you can split a transaction across categories (lines must add up exactly), delete a manual entry, and add a cash / manual entry.
@@ -121,8 +125,8 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 ## Layout
 
 ```
-app/           Streamlit app (streamlit_app.py, pages/, ui.py helpers)
-budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions
+app/           Streamlit app (streamlit_app.py, pages/, charts.py, ui.py)
+budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions, budgets, reports
 budget/parsers one module per card issuer (citi.py), sharing base.ParsedRow
 migrations/    versioned schema changes
 seed/          categories.toml (tracked), local.toml (untracked: people and cards)

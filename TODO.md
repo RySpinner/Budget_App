@@ -9,9 +9,9 @@ decisions to reassess are in DECISIONS.md.
   - decide how a fee/interest *reversal* is treated. A refund (negative spending) seems likely, since fees count as spending.
 - [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer.
 - [ ] **Category taxonomy:** confirm with your partner (SPEC §4, OPEN).
-- [ ] **Budget amounts**, especially Dining & Going Out (SPEC §4, OPEN). Needed for Phase 6.
-- [ ] **Annual subscriptions:** count in the month charged, or spread across 12 months? (SPEC §7, OPEN)
-- [ ] **Lumpy expenses** such as car maintenance: a separate budget line, or left out of the monthly pace view? (SPEC §7, OPEN)
+- [ ] **Budget amounts**, especially Dining & Going Out (SPEC §4, OPEN). Enter them on the Budgets page.
+- [ ] **Annual subscriptions:** count in the month charged (what happens now), or spread across 12 months? (SPEC §7, OPEN; DECISIONS.md #31)
+- [ ] **Lumpy expenses** such as car maintenance: a separate budget line, or left out of the monthly pace view? Nothing is left out yet. (SPEC §7, OPEN; DECISIONS.md #31)
 - [ ] **Old spreadsheet history:** import it or not? (SPEC §11)
 - [ ] **Raspberry Pi** model and OS. Also: is access from outside the home needed (Tailscale)? (SPEC §11)
 - [ ] **CLAUDE.md "Environment":** fill in the database host, name and user once settled. Never the password.
@@ -23,7 +23,7 @@ decisions to reassess are in DECISIONS.md.
 - [x] Phase 3: Import page (preview, dedup, undo)
 - [x] Phase 4: rules engine, Review and Rules pages
 - [x] Phase 5: Transactions page (filters, editing, splits, manual entry)
-- [ ] Phase 6: budgets and Dashboard
+- [x] Phase 6: budgets and Dashboard
 - [ ] Phase 7: deployment on the Pi (service, password, backups)
 - [ ] Phase 8: IOU ledger; optional history import
 - [ ] Settings page for categories, cards and people. No phase assigned yet; could come with or after Phase 6.

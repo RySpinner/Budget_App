@@ -64,6 +64,21 @@ changes a requirement). Newest items go at the end of each section.
 27. **A split needs at least two lines.** Split transactions are left out of the Review queue, because their categories live on the split lines.
 28. **Manual entries** use the typed description as both `raw_description` and `merchant`.
 
+### Budgets and Dashboard (Phase 6)
+31. **Annual subscriptions and lumpy expenses (both OPEN in SPEC §7)** currently get no special handling. Every charge counts in the month it happened, which is SPEC's "simpler, default" for subscriptions. Nothing is left out of the pace view. Revisit once these are decided (TODO.md).
+32. **Budget status** per category:
+    - *Over budget* if spent > monthly budget;
+    - else *Over pace* if spent > budget-to-date;
+    - else *On pace*;
+    - *No budget* if none is set.
+    It's shown with an icon and a label, never color alone.
+33. **Pace is measured as of:** today for the current month, the last day for past months, and not at all for future months.
+34. **"Spent this month"** is the month's total so far, including uncategorized spending. The "Budgeted categories vs pace" headline only counts categories that have a budget.
+35. **Chart amounts:** charts get integer cents and turn them into "$" axis labels inside the chart (in the browser). Tooltips use the exact text from `format_cents`, so no money is converted to floating point in Python.
+36. **Colors:** each top-level category keeps a fixed color, based on its position in the category order, and Uncategorized is gray. The palette passed the colorblind-safety checker in both light and dark mode. Every chart has a table view, as the checker's contrast warning requires.
+37. **Budget changes apply "from month X onward"** and can be set for any month from 12 back to 12 ahead. Deleting a history row makes the previous amount apply again.
+38. **The Dashboard is the app's start page.** Import moved to `/import`.
+
 ### Not yet addressed
 29. **No password on the app yet** (planned for Phase 7). Anyone on the home network can open it while it's running.
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
