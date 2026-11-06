@@ -52,7 +52,7 @@ class CategoryPace:
 
 
 def category_pace(conn: psycopg.Connection, month: date, as_of: date | None) -> list[CategoryPace]:
-    """Spending vs budget for every active top-level category in a month."""
+    """Spending vs budget for every active top-level expense category in a month."""
     rows = conn.execute(
         """
         SELECT c.id, c.name,
@@ -61,7 +61,7 @@ def category_pace(conn: psycopg.Connection, month: date, as_of: date | None) -> 
                budget_for_month(c.id, %(month)s),
                CASE WHEN %(as_of)s::date IS NULL THEN NULL ELSE budget_to_date(c.id, %(as_of)s::date) END
           FROM categories c
-         WHERE c.parent_id IS NULL AND c.active
+         WHERE c.parent_id IS NULL AND c.active AND c.kind = 'expense'
          ORDER BY c.sort_order, c.name
         """,
         {"month": month, "as_of": as_of},

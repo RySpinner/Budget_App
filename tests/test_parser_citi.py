@@ -23,7 +23,7 @@ def test_blank_rows_skipped(rows):
 
 def test_purchase(rows):
     r = rows[0]
-    assert r.kind == "purchase"
+    assert r.kind == "expense"
     assert r.txn_date == date(2026, 10, 26)
     assert r.posted_date is None
     assert r.amount_cents == 4217
@@ -36,20 +36,20 @@ def test_thousands_separator(rows):
 
 
 def test_refund_is_negative(rows):
-    assert rows[4].kind == "refund"
+    assert rows[4].kind == "expense"
     assert rows[4].amount_cents == -1525
 
 
-def test_payments_excluded(rows):
-    assert [(r.kind, r.exclude_reason, r.amount_cents) for r in rows[5:7]] == [
-        ("excluded", "card payment", -50000),
-        ("excluded", "card payment", -25000),  # credit written without a minus sign
+def test_payments_are_transfers(rows):
+    assert [(r.kind, r.reason, r.amount_cents) for r in rows[5:7]] == [
+        ("transfer", "card payment", -50000),
+        ("transfer", "card payment", -25000),  # credit written without a minus sign
     ]
 
 
 def test_pending_excluded(rows):
     assert rows[7].kind == "excluded"
-    assert rows[7].exclude_reason == "pending"
+    assert rows[7].reason == "pending"
 
 
 def test_wrong_file_rejected():
@@ -80,12 +80,12 @@ def test_trailing_comma_header_accepted(split_rows):
 
 def test_normal_row_with_extra_blank_column(split_rows):
     r = split_rows[0]
-    assert (r.kind, r.amount_cents) == ("purchase", 3864)
+    assert (r.kind, r.amount_cents) == ("expense", 3864)
 
 
 def test_payment_split_across_columns(split_rows):
     r = split_rows[1]
-    assert (r.kind, r.exclude_reason, r.amount_cents) == ("excluded", "card payment", -123456)
+    assert (r.kind, r.reason, r.amount_cents) == ("transfer", "card payment", -123456)
     assert r.raw_description == "AUTOPAY 000000000000000RAUTOPAY AUTO-PMT"
     # The original pieces are kept as read.
     assert r.raw_row["Credit"] == "($1)"
@@ -94,7 +94,7 @@ def test_payment_split_across_columns(split_rows):
 
 def test_debit_split_across_columns(split_rows):
     r = split_rows[2]
-    assert (r.kind, r.amount_cents) == ("purchase", 234567)
+    assert (r.kind, r.amount_cents) == ("expense", 234567)
     assert r.raw_description == "FAKE FURNITURE STORE null XXXXXXXXXXXX0000"
 
 
@@ -102,7 +102,7 @@ def test_comma_inside_description(split_rows):
     purchase, refund = split_rows[3], split_rows[4]
     assert (purchase.raw_description, purchase.amount_cents) == ("FAKE STORE, INC null XXXXXXXXXXXX0000", 1200)
     assert (refund.kind, refund.raw_description, refund.amount_cents) == (
-        "refund", "FAKE STORE, INC RETURN null XXXXXXXXXXXX0000", -1200)
+        "expense", "FAKE STORE, INC RETURN null XXXXXXXXXXXX0000", -1200)
 
 
 @pytest.mark.parametrize("line, cents", [
@@ -129,11 +129,11 @@ RAW_FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "raw_download.csv"
 
 def test_raw_download_format():
     rows = citi.parse(RAW_FIXTURE.read_text())
-    assert [(r.kind, r.exclude_reason, r.amount_cents) for r in rows] == [
-        ("purchase", None, 3864),
-        ("excluded", "card payment", -123456),
-        ("purchase", None, 234567),
-        ("refund", None, -1525),
+    assert [(r.kind, r.reason, r.amount_cents) for r in rows] == [
+        ("expense", None, 3864),
+        ("transfer", "card payment", -123456),
+        ("expense", None, 234567),
+        ("expense", None, -1525),
     ]
     assert rows[2].raw_description == "FAKE FURNITURE STORE, INC null XXXXXXXXXXXX0000"
 
@@ -148,3 +148,18 @@ def test_excel_saved_and_raw_versions_dedup_to_the_same_fingerprint():
                        "Cleared,10/1/2026,AUTOPAY X AUTO-PMT,,($1),234.56\n"
                        "Cleared,10/2/2026,FAKE SHOP,$5.00 ,,\n")
     assert [fp for _, fp in fingerprint_rows(1, raw)] == [fp for _, fp in fingerprint_rows(1, excel)]
+
+
+def test_rewards_still_excluded():
+    text = "Status,Date,Description,Debit,Credit\nCleared,01/02/2026,CASH REWARD REDEMPTION,,-25.00\n"
+    [row] = citi.parse(text)
+    assert (row.kind, row.reason) == ("excluded", "rewards redemption")
+
+
+def test_describe_labels():
+    from budget.parsers.base import describe
+    assert describe("expense", 100) == "purchase"
+    assert describe("expense", -100) == "refund"
+    assert describe("transfer", -100, "card payment") == "transfer (card payment)"
+    assert describe("excluded", 0, "pending") == "excluded: pending"
+    assert describe(None, 5) == "needs review"

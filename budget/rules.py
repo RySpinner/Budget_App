@@ -1,7 +1,7 @@
 """Categorization rules (SPEC section 6).
 
 A rule says "if the bank description matches PATTERN (and optionally the
-card / amount range fit), put the transaction in CATEGORY". Rules are tried
+account / amount range fit), put the transaction in CATEGORY". Rules are tried
 in priority order (lowest number first, then oldest first); the first match
 wins.
 
@@ -29,14 +29,15 @@ class Rule:
     priority: int
     match_type: str
     pattern: str
-    card_id: int | None
+    account_id: int | None
     min_amount_cents: int | None
     max_amount_cents: int | None
     category_id: int
     merchant_name: str | None
+    category_kind: str = "expense"     # "expense" or "income": the kind a match gives the row
 
-    def matches(self, raw_description: str, card_id: int | None, amount_cents: int) -> bool:
-        if self.card_id is not None and self.card_id != card_id:
+    def matches(self, raw_description: str, account_id: int | None, amount_cents: int) -> bool:
+        if self.account_id is not None and self.account_id != account_id:
             return False
         if self.min_amount_cents is not None and amount_cents < self.min_amount_cents:
             return False
@@ -71,19 +72,29 @@ def validate_rule(match_type: str, pattern: str) -> None:
 def load_rules(conn: psycopg.Connection) -> list[Rule]:
     rows = conn.execute(
         """
-        SELECT id, priority, match_type, pattern, card_id, min_amount_cents, max_amount_cents,
-               category_id, merchant_name
-          FROM rules
-         WHERE active
-         ORDER BY priority, id
+        SELECT r.id, r.priority, r.match_type, r.pattern, r.account_id, r.min_amount_cents, r.max_amount_cents,
+               r.category_id, r.merchant_name, c.kind
+          FROM rules r JOIN categories c ON c.id = r.category_id
+         WHERE r.active
+         ORDER BY r.priority, r.id
         """
     ).fetchall()
     return [Rule(*row) for row in rows]
 
 
-def first_match(rules: list[Rule], raw_description: str, card_id: int | None, amount_cents: int) -> Rule | None:
+def first_match(rules: list[Rule], raw_description: str, account_id: int | None, amount_cents: int,
+                kind: str | None = None, kind_is_manual: bool = False) -> Rule | None:
+    """The first rule (in priority order) that matches and is allowed to apply.
+
+    Rules never apply to transfers, and never change a kind a person chose
+    (a manual "expense" row can't get an income category from a rule).
+    """
+    if kind == "transfer":
+        return None
     for rule in rules:
-        if rule.matches(raw_description, card_id, amount_cents):
+        if kind_is_manual and kind is not None and rule.category_kind != kind:
+            continue
+        if rule.matches(raw_description, account_id, amount_cents):
             return rule
     return None
 
@@ -98,14 +109,19 @@ class ApplyResult:
 def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = None) -> ApplyResult:
     """Run the active rules over existing transactions (all, or just the given ids).
 
-    Manual categories are skipped. Runs in one database transaction.
+    Manual categories and transfers are skipped. A rule sets the row's
+    category and, through the category, its kind (expense or income). If a
+    rule-set row no longer matches any rule, it goes back to Review, and a
+    kind that only a rule had given it is cleared too. Runs in one database
+    transaction.
     """
     rules = load_rules(conn)
     result = ApplyResult()
     sql = """
-        SELECT id, raw_description, card_id, amount_cents, category_id, rule_id
+        SELECT id, raw_description, account_id, amount_cents, category_id, rule_id, kind, kind_source
           FROM transactions
          WHERE category_source IS DISTINCT FROM 'manual'
+           AND kind IS DISTINCT FROM 'transfer'
     """
     params: tuple = ()
     if transaction_ids is not None:
@@ -113,12 +129,16 @@ def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = No
         params = (transaction_ids,)
 
     with conn.transaction():
-        for txn_id, raw, card_id, amount, category_id, rule_id in conn.execute(sql, params).fetchall():
-            rule = first_match(rules, raw, card_id, amount)
+        rows = conn.execute(sql, params).fetchall()
+        for txn_id, raw, account_id, amount, category_id, rule_id, kind, kind_source in rows:
+            rule = first_match(rules, raw, account_id, amount, kind, kind_source == "manual")
             if rule is None:
                 if category_id is not None:
                     conn.execute(
-                        """UPDATE transactions SET category_id = NULL, category_source = NULL, rule_id = NULL
+                        """UPDATE transactions
+                              SET category_id = NULL, category_source = NULL, rule_id = NULL,
+                                  kind        = CASE WHEN kind_source = 'rule' THEN NULL ELSE kind END,
+                                  kind_source = CASE WHEN kind_source = 'rule' THEN NULL ELSE kind_source END
                             WHERE id = %s AND category_source = 'rule'""",
                         (txn_id,),
                     )
@@ -127,14 +147,17 @@ def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = No
 
             if category_id == rule.category_id and rule_id == rule.id and rule.merchant_name is None:
                 continue  # already up to date
+            # The kind follows the category; keep the existing source if the kind doesn't change.
+            new_kind_source = kind_source if kind == rule.category_kind else "rule"
             conn.execute(
                 """
                 UPDATE transactions
                    SET category_id = %s, category_source = 'rule', rule_id = %s,
+                       kind = %s, kind_source = %s,
                        merchant = COALESCE(%s, merchant)
                  WHERE id = %s AND category_source IS DISTINCT FROM 'manual'
                 """,
-                (rule.category_id, rule.id, rule.merchant_name, txn_id),
+                (rule.category_id, rule.id, rule.category_kind, new_kind_source, rule.merchant_name, txn_id),
             )
             if category_id is None:
                 result.categorized += 1
@@ -167,7 +190,7 @@ def create_rule(
     match_type: str = "contains",
     priority: int = 100,
     merchant_name: str | None = None,
-    card_id: int | None = None,
+    account_id: int | None = None,
     min_amount_cents: int | None = None,
     max_amount_cents: int | None = None,
     created_from_transaction_id: int | None = None,
@@ -175,12 +198,12 @@ def create_rule(
     validate_rule(match_type, pattern)
     return conn.execute(
         """
-        INSERT INTO rules (priority, match_type, pattern, card_id, min_amount_cents, max_amount_cents,
+        INSERT INTO rules (priority, match_type, pattern, account_id, min_amount_cents, max_amount_cents,
                            category_id, merchant_name, created_from_transaction_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
         """,
-        (priority, match_type, pattern.strip(), card_id, min_amount_cents, max_amount_cents,
+        (priority, match_type, pattern.strip(), account_id, min_amount_cents, max_amount_cents,
          category_id, merchant_name or None, created_from_transaction_id),
     ).fetchone()[0]
 
@@ -190,13 +213,24 @@ def categorize_manually(
 ) -> tuple[int | None, int]:
     """Categorize one transaction by hand, optionally saving a rule from it.
 
+    The category decides the kind (expense or income); both are marked
+    'manual'. If the row was half of a transfer, that transfer is dissolved
+    first (the other leg goes back to unmatched).
+
     Returns (new_rule_id or None, number of OTHER uncategorized rows the new
-    rule categorized). The transaction itself is marked 'manual'.
+    rule categorized).
     """
     with conn.transaction():
         conn.execute(
-            "UPDATE transactions SET category_id = %s, category_source = 'manual', rule_id = NULL WHERE id = %s",
-            (category_id, transaction_id),
+            "DELETE FROM transfers WHERE id = (SELECT transfer_id FROM transactions WHERE id = %s)",
+            (transaction_id,),
+        )
+        conn.execute(
+            """UPDATE transactions
+                  SET kind = (SELECT kind FROM categories WHERE id = %s), kind_source = 'manual',
+                      category_id = %s, category_source = 'manual', rule_id = NULL
+                WHERE id = %s""",
+            (category_id, category_id, transaction_id),
         )
         if not save_rule_pattern:
             return None, 0
@@ -207,6 +241,7 @@ def categorize_manually(
         uncategorized_ids = [
             r[0] for r in conn.execute(
                 """SELECT id FROM transactions t WHERE category_id IS NULL
+                   AND kind IS DISTINCT FROM 'transfer'
                    AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)"""
             )
         ]

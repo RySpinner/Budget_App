@@ -1,9 +1,14 @@
 """Reading and editing transactions for the Transactions page.
 
-The page shows *spending lines* (see migrations/0002_spending_lines.sql):
-an unsplit transaction is one line, a split transaction is one line per
-split. Each line is identified by (transaction_id, split_id), where
-split_id is None for an unsplit transaction.
+The page shows transaction *lines* (see the transaction_lines view in
+migrations/0004_accounts.sql): an unsplit transaction is one line, a split
+transaction is one line per split. Each line is identified by
+(transaction_id, split_id), where split_id is None for an unsplit transaction.
+
+Every transaction has a kind: expense (a refund is a negative expense),
+income, transfer (between two of our own accounts), or None (not known yet).
+Choosing a category sets the kind to match it; choosing TRANSFER makes the
+row a transfer.
 
 Running monthly totals and budget-to-date are computed here when the page
 asks for them; they are never stored.
@@ -15,16 +20,19 @@ from datetime import date
 import psycopg
 from psycopg.rows import dict_row
 
-UNCATEGORIZED = -1        # filter value: lines with no category
-CASH = -1                 # filter value: manual entries (no card)
+UNCATEGORIZED = -1        # category filter value: lines with no category
+TRANSFER = "transfer"     # "category" choice meaning: a transfer between our accounts
+UNKNOWN_KIND = "unknown"  # kind filter value: rows whose kind isn't known yet
+KINDS = ("expense", "income", "transfer", UNKNOWN_KIND)
 
 
 @dataclass
 class Filters:
     month: date | None = None             # first day of a month, or None for all
+    kind: str | None = "expense"          # one of KINDS, or None for every kind
     top_category_id: int | None = None    # a top-level category, UNCATEGORIZED, or None for all
     category_id: int | None = None        # a subcategory, or None for all
-    card_id: int | None = None            # a card, CASH, or None for all
+    account_id: int | None = None
     purchaser_id: int | None = None
 
 
@@ -34,13 +42,16 @@ class Line:
     split_id: int | None
     split_count: int
     source: str
+    kind: str | None
+    transfer_id: int | None
     effective_date: date
     amount_cents: int
     category_id: int | None
     top_category_id: int | None
     merchant: str | None
     raw_description: str
-    card: str | None
+    account_id: int
+    account: str
     purchaser_id: int
     note: str | None
     running_total_cents: int | None = None    # filled in by add_running_totals
@@ -48,16 +59,27 @@ class Line:
 
 
 def months_with_data(conn: psycopg.Connection) -> list[date]:
-    rows = conn.execute("SELECT DISTINCT month FROM spending_lines ORDER BY month DESC").fetchall()
+    rows = conn.execute("SELECT DISTINCT month FROM transaction_lines ORDER BY month DESC").fetchall()
     return [r[0] for r in rows]
 
 
+def cash_account_id(conn: psycopg.Connection) -> int:
+    return conn.execute(
+        "SELECT id FROM accounts WHERE account_type = 'cash' AND active ORDER BY id LIMIT 1"
+    ).fetchone()[0]
+
+
 def load_lines(conn: psycopg.Connection, f: Filters) -> list[Line]:
-    """Spending lines matching the filters, oldest first."""
+    """Transaction lines matching the filters, oldest first."""
     where, params = [], []
     if f.month is not None:
         where.append("month = %s")
         params.append(f.month)
+    if f.kind == UNKNOWN_KIND:
+        where.append("kind IS NULL")
+    elif f.kind is not None:
+        where.append("kind = %s")
+        params.append(f.kind)
     if f.top_category_id == UNCATEGORIZED:
         where.append("category_id IS NULL")
     elif f.top_category_id is not None:
@@ -66,21 +88,19 @@ def load_lines(conn: psycopg.Connection, f: Filters) -> list[Line]:
     if f.category_id is not None:
         where.append("category_id = %s")
         params.append(f.category_id)
-    if f.card_id == CASH:
-        where.append("card_id IS NULL")
-    elif f.card_id is not None:
-        where.append("card_id = %s")
-        params.append(f.card_id)
+    if f.account_id is not None:
+        where.append("account_id = %s")
+        params.append(f.account_id)
     if f.purchaser_id is not None:
         where.append("purchaser_id = %s")
         params.append(f.purchaser_id)
 
     want_budget = f.top_category_id not in (None, UNCATEGORIZED)
     sql = f"""
-        SELECT transaction_id, split_id, split_count, source, effective_date, amount_cents,
-               category_id, top_category_id, merchant, raw_description, card, purchaser_id, note,
+        SELECT transaction_id, split_id, split_count, source, kind, transfer_id, effective_date, amount_cents,
+               category_id, top_category_id, merchant, raw_description, account_id, account, purchaser_id, note,
                {"budget_to_date(top_category_id, effective_date)" if want_budget else "NULL"} AS budget_to_date_cents
-          FROM spending_lines
+          FROM transaction_lines
          {"WHERE " + " AND ".join(where) if where else ""}
          ORDER BY effective_date, transaction_id, split_id NULLS FIRST
     """
@@ -106,47 +126,89 @@ def add_running_totals(lines: list[Line]) -> None:
 # Editing
 # ---------------------------------------------------------------------------
 
+def _dissolve_transfer(conn: psycopg.Connection, transaction_id: int) -> None:
+    """Unlink a transfer this row belongs to; the other leg goes back to unmatched."""
+    conn.execute(
+        "DELETE FROM transfers WHERE id = (SELECT transfer_id FROM transactions WHERE id = %s)",
+        (transaction_id,),
+    )
+
+
 def update_line(
     conn: psycopg.Connection,
     transaction_id: int,
     split_id: int | None,
     *,
-    category_id: int | None,
+    category_id: int | str | None,
     note: str | None,
     purchaser_id: int,
 ) -> None:
     """Save the editable fields of one line.
 
-    Category and note belong to the split for a split line, otherwise to the
-    transaction. A category chosen here counts as a manual choice, so rules
-    won't change it. Purchaser always belongs to the whole transaction.
+    category_id is a subcategory id, TRANSFER, or None (uncategorized).
+    - A category sets the kind to match it (expense or income); a transfer
+      link is dissolved first. Both count as manual choices, so rules won't
+      change them.
+    - TRANSFER makes the row a transfer between our accounts (no category).
+    - Category and note belong to the split for a split line, otherwise to
+      the transaction. Purchaser always belongs to the whole transaction.
     """
     note = (note or "").strip() or None
     with conn.transaction():
-        if split_id is None:
-            current = conn.execute(
-                "SELECT category_id FROM transactions WHERE id = %s", (transaction_id,)
-            ).fetchone()
-            if current is None:
-                raise ValueError(f"No transaction {transaction_id}")
-            if current[0] != category_id:
-                conn.execute(
-                    """UPDATE transactions
-                          SET category_id = %s, category_source = %s, rule_id = NULL
-                        WHERE id = %s""",
-                    (category_id, "manual" if category_id is not None else None, transaction_id),
-                )
-            conn.execute("UPDATE transactions SET note = %s WHERE id = %s", (note, transaction_id))
-        else:
-            if category_id is None:
-                raise ValueError("A split line needs a category")
+        current = conn.execute(
+            "SELECT category_id, kind FROM transactions WHERE id = %s", (transaction_id,)
+        ).fetchone()
+        if current is None:
+            raise ValueError(f"No transaction {transaction_id}")
+        current_category, current_kind = current
+
+        if split_id is not None:
+            if category_id is None or category_id == TRANSFER:
+                raise ValueError("A split line needs a category (remove the split to make it a transfer)")
             conn.execute(
                 "UPDATE splits SET category_id = %s, note = %s WHERE id = %s AND transaction_id = %s",
                 (category_id, note, split_id, transaction_id),
             )
+        else:
+            if category_id == TRANSFER:
+                if current_kind != "transfer":
+                    mark_as_transfer(conn, transaction_id)
+            elif category_id is not None:
+                if category_id != current_category or current_kind == "transfer":
+                    _dissolve_transfer(conn, transaction_id)
+                    conn.execute(
+                        """UPDATE transactions
+                              SET kind = (SELECT kind FROM categories WHERE id = %s), kind_source = 'manual',
+                                  category_id = %s, category_source = 'manual', rule_id = NULL
+                            WHERE id = %s""",
+                        (category_id, category_id, transaction_id),
+                    )
+            elif current_category is not None:
+                conn.execute(
+                    "UPDATE transactions SET category_id = NULL, category_source = NULL, rule_id = NULL WHERE id = %s",
+                    (transaction_id,),
+                )
+            conn.execute("UPDATE transactions SET note = %s WHERE id = %s", (note, transaction_id))
         conn.execute(
             "UPDATE transactions SET purchaser_id = %s WHERE id = %s AND purchaser_id <> %s",
             (purchaser_id, transaction_id, purchaser_id),
+        )
+
+
+def mark_as_transfer(conn: psycopg.Connection, transaction_id: int) -> None:
+    """Make a row a transfer between our own accounts (by hand): no category, not spending.
+
+    It stays unmatched until it is linked to the other account's leg (phase 10).
+    """
+    with conn.transaction():
+        if conn.execute("SELECT 1 FROM splits WHERE transaction_id = %s", (transaction_id,)).fetchone():
+            raise ValueError("Remove the split before marking this as a transfer")
+        conn.execute(
+            """UPDATE transactions
+                  SET kind = 'transfer', kind_source = 'manual',
+                      category_id = NULL, category_source = NULL, rule_id = NULL
+                WHERE id = %s""",
+            (transaction_id,),
         )
 
 
@@ -162,16 +224,20 @@ def set_splits(conn: psycopg.Connection, transaction_id: int, lines: list[SplitL
 
     The lines must add up exactly to the transaction amount. That is checked
     here first (for a clear message) and again by the database at commit.
+    Only expense and income rows can be split, into categories of that kind.
     """
-    amount = conn.execute("SELECT amount_cents FROM transactions WHERE id = %s", (transaction_id,)).fetchone()
-    if amount is None:
+    row = conn.execute("SELECT amount_cents, kind FROM transactions WHERE id = %s", (transaction_id,)).fetchone()
+    if row is None:
         raise ValueError(f"No transaction {transaction_id}")
+    amount, kind = row
     if lines:
+        if kind not in ("expense", "income"):
+            raise ValueError("Only expense or income transactions can be split; set a category first")
         if len(lines) < 2:
             raise ValueError("A split needs at least two lines (otherwise just set the category)")
         total = sum(line.amount_cents for line in lines)
-        if total != amount[0]:
-            raise ValueError(f"Split lines add up to {total} cents but the transaction is {amount[0]} cents")
+        if total != amount:
+            raise ValueError(f"Split lines add up to {total} cents but the transaction is {amount} cents")
 
     with conn.transaction():
         conn.execute("DELETE FROM splits WHERE transaction_id = %s", (transaction_id,))
@@ -199,30 +265,40 @@ def add_manual(
     purchaser_id: int,
     category_id: int | None = None,
     note: str | None = None,
+    account_id: int | None = None,
 ) -> int:
-    """Record cash or other non-card spending. Returns the new transaction id."""
+    """Record something with no export (usually cash spending). Returns the new transaction id.
+
+    Goes in the Cash account unless another account is given. The kind comes
+    from the category; without one it is recorded as an expense awaiting a
+    category in Review.
+    """
     description = description.strip()
     if not description:
         raise ValueError("Description can't be empty")
     if amount_cents == 0:
         raise ValueError("Amount can't be zero")
     with conn.transaction():
+        account_id = account_id or cash_account_id(conn)
+        kind = "expense"
+        if category_id is not None:
+            kind = conn.execute("SELECT kind FROM categories WHERE id = %s", (category_id,)).fetchone()[0]
         return conn.execute(
             """
             INSERT INTO transactions
-                (source, txn_date, amount_cents, raw_description, merchant,
-                 category_id, category_source, purchaser_id, note)
-            VALUES ('manual', %s, %s, %s, %s, %s, %s, %s, %s)
+                (source, account_id, txn_date, amount_cents, raw_description, merchant,
+                 kind, kind_source, category_id, category_source, purchaser_id, note)
+            VALUES ('manual', %s, %s, %s, %s, %s, %s, 'manual', %s, %s, %s, %s)
             RETURNING id
             """,
-            (txn_date, amount_cents, description, description, category_id,
+            (account_id, txn_date, amount_cents, description, description, kind, category_id,
              "manual" if category_id is not None else None, purchaser_id, (note or "").strip() or None),
         ).fetchone()[0]
 
 
 def delete_manual(conn: psycopg.Connection, transaction_id: int) -> None:
-    """Delete a manual entry. Card transactions are removed by undoing their import instead."""
+    """Delete a manual entry. Imported rows are removed by undoing their import instead."""
     with conn.transaction():
         cur = conn.execute("DELETE FROM transactions WHERE id = %s AND source = 'manual'", (transaction_id,))
         if cur.rowcount == 0:
-            raise ValueError("Only manual entries can be deleted here; undo the import to remove card rows")
+            raise ValueError("Only manual entries can be deleted here; undo the import to remove imported rows")

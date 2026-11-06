@@ -1,4 +1,5 @@
-# Starting category taxonomy (SPEC.md section 4).
+# Starting category taxonomy (SPEC.md section 4). Top-level groups are
+# expense categories unless they say kind = "income".
 # Still OPEN: confirm with both partners. The seed only ADDS categories that
 # are missing; it never renames, reorders, or deletes existing ones, so later
 # edits made in the app are safe. Every top-level category gets a "General"
@@ -26,3 +27,9 @@ subcategories = ["Subscriptions", "Bills", "General"]
 [[category]]
 name = "Discretionary"
 subcategories = ["General", "Fees & Interest"]
+
+# Income (v2). kind = "income" marks the whole group; budgets don't apply to it.
+[[category]]
+name = "Income"
+kind = "income"
+subcategories = ["Paycheck", "Interest", "Refunds & reimbursements", "General"]

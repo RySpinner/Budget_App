@@ -4,7 +4,7 @@ import pytest
 from psycopg import errors
 
 from budget.transactions import (
-    CASH, UNCATEGORIZED, Filters, SplitLine, add_manual, delete_manual, get_splits, load_lines,
+    UNCATEGORIZED, Filters, cash_account_id, SplitLine, add_manual, delete_manual, get_splits, load_lines,
     months_with_data, set_splits, update_line,
 )
 
@@ -39,8 +39,8 @@ def test_filters(conn, add_card_txn, basics):
     assert amounts(Filters(top_category_id=basics["top"])) == [100]
     assert amounts(Filters(top_category_id=UNCATEGORIZED)) == [200, 300]
     assert amounts(Filters(category_id=basics["sub"])) == [100]
-    assert amounts(Filters(card_id=CASH)) == [300]
-    assert amounts(Filters(card_id=basics["card"])) == [100, 200]
+    assert amounts(Filters(account_id=cash_account_id(conn))) == [300]
+    assert amounts(Filters(account_id=basics["card"])) == [100, 200]
     assert amounts(Filters(purchaser_id=basics["person"])) == [100, 200, 300]
     assert months_with_data(conn) == [date(2026, 2, 1), date(2026, 1, 1)]
     assert manual
@@ -147,10 +147,10 @@ def test_add_and_delete_manual(conn, basics):
     tid = add_manual(conn, txn_date=date(2026, 3, 1), amount_cents=2500, description=" Farmers market ",
                      purchaser_id=basics["person"], category_id=basics["sub"], note="veg")
     row = conn.execute(
-        "SELECT source, card_id, posted_date, raw_description, merchant, category_source, note FROM transactions WHERE id = %s",
+        "SELECT source, account_id, posted_date, raw_description, merchant, category_source, note FROM transactions WHERE id = %s",
         (tid,),
     ).fetchone()
-    assert row == ("manual", None, None, "Farmers market", "Farmers market", "manual", "veg")
+    assert row == ("manual", cash_account_id(conn), None, "Farmers market", "Farmers market", "manual", "veg")
     delete_manual(conn, tid)
     assert conn.execute("SELECT count(*) FROM transactions WHERE id = %s", (tid,)).fetchone()[0] == 0
 
@@ -174,3 +174,59 @@ def test_split_sum_still_enforced_by_database(conn, add_card_txn, basics):
         with conn.transaction():
             conn.execute("INSERT INTO splits (transaction_id, amount_cents, category_id) VALUES (%s, 1, %s)", (tid, basics["sub"]))
             conn.execute("SET CONSTRAINTS ALL IMMEDIATE")
+
+
+# ---- kinds (v2) ------------------------------------------------------------------
+
+def test_kind_filter(conn, add_card_txn, basics):
+    add_card_txn(amount_cents=100)
+    add_card_txn(amount_cents=-500, kind="transfer")
+    add_card_txn(amount_cents=-900, kind=None, kind_source=None, account_id=basics["checking"])
+    kinds = lambda k: [l.amount_cents for l in load_lines(conn, Filters(kind=k))]  # noqa: E731
+    assert kinds("expense") == [100]
+    assert kinds("transfer") == [-500]
+    assert kinds("unknown") == [-900]
+    assert sorted(kinds(None)) == [-900, -500, 100]
+
+
+def test_mark_as_transfer_and_back(conn, add_card_txn, basics):
+    from budget.transactions import TRANSFER
+    tid = add_card_txn(amount_cents=-50000, category_id=basics["sub"], category_source="rule")
+    update_line(conn, tid, None, category_id=TRANSFER, note=None, purchaser_id=basics["person"])
+    assert conn.execute("SELECT kind, kind_source, category_id FROM transactions WHERE id = %s",
+                        (tid,)).fetchone() == ("transfer", "manual", None)
+    update_line(conn, tid, None, category_id=basics["income"], note=None, purchaser_id=basics["person"])
+    assert conn.execute("SELECT kind, category_id FROM transactions WHERE id = %s",
+                        (tid,)).fetchone() == ("income", basics["income"])
+
+
+def test_recategorizing_a_linked_transfer_unlinks_both_legs(conn, add_card_txn, basics):
+    out = add_card_txn(amount_cents=500, kind="transfer", account_id=basics["checking"])
+    into = add_card_txn(amount_cents=-500, kind="transfer")
+    t = conn.execute("INSERT INTO transfers (matched_by) VALUES ('manual') RETURNING id").fetchone()[0]
+    conn.execute("UPDATE transactions SET transfer_id = %s WHERE id IN (%s, %s)", (t, out, into))
+    update_line(conn, out, None, category_id=basics["sub"], note=None, purchaser_id=basics["person"])
+    conn.execute("SET CONSTRAINTS ALL IMMEDIATE")
+    assert conn.execute("SELECT kind, transfer_id FROM transactions WHERE id = %s", (out,)).fetchone() == ("expense", None)
+    assert conn.execute("SELECT kind, transfer_id FROM transactions WHERE id = %s", (into,)).fetchone() == ("transfer", None)
+
+
+def test_transfers_cannot_be_split(conn, add_card_txn, basics):
+    tid = add_card_txn(amount_cents=1000, kind="transfer")
+    with pytest.raises(ValueError, match="Only expense or income"):
+        set_splits(conn, tid, [SplitLine(500, basics["sub"]), SplitLine(500, basics["sub"])])
+
+
+def test_split_row_cannot_become_transfer(conn, add_card_txn, basics):
+    from budget.transactions import mark_as_transfer
+    tid = add_card_txn(amount_cents=1000)
+    set_splits(conn, tid, [SplitLine(500, basics["sub"]), SplitLine(500, basics["sub2"])])
+    with pytest.raises(ValueError, match="Remove the split"):
+        mark_as_transfer(conn, tid)
+
+
+def test_manual_income_entry(conn, basics):
+    tid = add_manual(conn, txn_date=date(2026, 3, 1), amount_cents=-20000, description="Sold a bike",
+                     purchaser_id=basics["person"], category_id=basics["income"], account_id=basics["checking"])
+    assert conn.execute("SELECT kind, account_id FROM transactions WHERE id = %s", (tid,)).fetchone() == (
+        "income", basics["checking"])

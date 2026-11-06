@@ -21,6 +21,8 @@ same fingerprints, so importing both doesn't create duplicates.
 - Charges are in Debit; payments and refunds are in Credit. Credits are made
   negative here whatever sign Citi writes them with.
 - Status "Pending" rows are excluded; only cleared rows are recorded.
+- Card payments and balance transfers are kept as kind "transfer" (the card's
+  leg of a move between our accounts); rewards credits are still excluded.
 - Interest and fees count as spending (not excluded).
 - The "XXXXXXXXXXXX1234" at the end of a description is usually a virtual card
   number that differs by merchant, NOT the card's real last 4, so it is not
@@ -36,16 +38,18 @@ import re
 from datetime import datetime
 
 from budget.money import parse_cents
-from budget.parsers.base import ParsedRow, kind_for_amount
+from budget.parsers.base import ParsedRow
 
 EXPECTED_COLUMNS = ["Status", "Date", "Description", "Debit", "Credit"]
 
-# Credits that are not refunds: paying the card off, rewards redemptions.
-EXCLUDE_PATTERNS = [
-    (re.compile(r"\bAUTOPAY\b|\bAUTO-PMT\b", re.I), "card payment"),
-    (re.compile(r"\bPAYMENT\b.*\bTHANK YOU\b", re.I), "card payment"),
-    (re.compile(r"\bBALANCE TRANSFER\b", re.I), "balance transfer"),
-    (re.compile(r"\b(CASH REWARD|REWARDS? REDEMPTION|THANKYOU POINTS)\b", re.I), "rewards redemption"),
+# Credits that are not refunds. Card payments and balance transfers are moves
+# between our own accounts (kind "transfer", stored); rewards are still excluded
+# until SPEC decides income vs negative expense (OPEN).
+SPECIAL_ROWS = [
+    (re.compile(r"\bAUTOPAY\b|\bAUTO-PMT\b", re.I), "transfer", "card payment"),
+    (re.compile(r"\bPAYMENT\b.*\bTHANK YOU\b", re.I), "transfer", "card payment"),
+    (re.compile(r"\bBALANCE TRANSFER\b", re.I), "transfer", "balance transfer"),
+    (re.compile(r"\b(CASH REWARD|REWARDS? REDEMPTION|THANKYOU POINTS)\b", re.I), "excluded", "rewards redemption"),
 ]
 
 # The start of a money amount that may continue in the next column, e.g. " -$ 1", "$2", "($1)".
@@ -128,13 +132,13 @@ def _parse_row(fields: list[str]) -> ParsedRow:
     else:
         raise ValueError("Row has neither a Debit nor a Credit")
 
-    reason = None
+    kind, reason = "expense", None          # purchases, refunds, interest, fees
     if status.strip().lower() == "pending":
-        reason = "pending"
+        kind, reason = "excluded", "pending"
     else:
-        for pattern, why in EXCLUDE_PATTERNS:
+        for pattern, special_kind, why in SPECIAL_ROWS:
             if pattern.search(description):
-                reason = why
+                kind, reason = special_kind, why
                 break
 
     # Keep the original fields exactly as read (nothing re-joined), by column name;
@@ -144,11 +148,11 @@ def _parse_row(fields: list[str]) -> ParsedRow:
         raw_row["_extra"] = fields[len(EXPECTED_COLUMNS):]
 
     return ParsedRow(
-        kind="excluded" if reason else kind_for_amount(amount),
+        kind=kind,
         txn_date=txn_date,
         posted_date=None,
         amount_cents=amount,
         raw_description=description,
         raw_row=raw_row,
-        exclude_reason=reason,
+        reason=reason,
     )

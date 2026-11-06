@@ -21,8 +21,8 @@ def db(committed_database_url, tmp_path_factory):
         seed_categories(conn, load_toml(CATEGORIES_FILE))
         person = conn.execute("INSERT INTO people (name) VALUES ('P') RETURNING id").fetchone()[0]
         card = conn.execute(
-            "INSERT INTO cards (display_name, issuer, owner_person_id, parser_key) "
-            "VALUES ('Citi', 'Citi', %s, 'citi') RETURNING id", (person,),
+            "INSERT INTO accounts (account_class, account_type, display_name, institution, owner_person_id, parser_key) "
+            "VALUES ('liability', 'credit_card', 'Citi', 'Citi', %s, 'citi') RETURNING id", (person,),
         ).fetchone()[0]
         coffee = conn.execute("SELECT id FROM categories WHERE name = 'Coffee'").fetchone()[0]
         create_rule(conn, "coffee roasters", coffee)

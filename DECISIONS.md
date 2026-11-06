@@ -131,6 +131,16 @@ changes a requirement). Newest items go at the end of each section.
 59. **Accounts have a class** (asset or liability) **and a type** (checking, savings, cash, credit_card; reserved: brokerage, retirement, loan). Investment accounts will be value-only, through balance snapshots.
 60. **v2 phase order:** 8 accounts foundation → 9 bank parsers → 10 transfer matching → 11 reports and Accounts page → 12 PINNED special types; the IOU ledger becomes phase 13.
 
+### Phase 8 as built (accounts foundation)
+61. **Existing data:** card ids are kept as account ids, so old import fingerprints still match. All existing rows become `expense` (kind source `parser` for imported rows, `manual` for hand-entered ones), and manual rows move into the Cash account.
+62. **Re-importing old card files is safe and fills in the card payments,** which are now stored as transfer legs. Everything already imported shows up as a duplicate.
+63. **Rewards credits are still excluded** until SPEC's open question (income or negative expense) is decided. Pending rows are excluded as before.
+64. **A manual entry without a category is recorded as an expense** awaiting a category, not as "kind unknown", because the form is mostly for cash spending.
+65. **Choosing a category sets the kind:** an income category makes the row income. "Transfer between our accounts" is offered as a choice next to the categories in Review and Transactions, rather than as a separate Kind field. Saving a *rule* for a transfer comes in phase 9.
+66. **Categorizing a linked transfer leg by hand dissolves the link,** and the other leg goes back to unmatched. Deleting a leg (e.g. undoing an import) does the same.
+67. **The Transactions page shows spending by default,** with a Kind filter for income, transfers, unknown or everything. Running totals add up whatever is shown.
+68. **`local.toml` uses `[[account]]` entries** (display_name, institution, type, last4, owner, optional parser_key). Old `[[card]]` entries still work as credit cards.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 

@@ -65,30 +65,40 @@ def basics(conn):
     q = lambda sql, *args: conn.execute(sql, args).fetchone()[0]  # noqa: E731
     person = q("INSERT INTO people (name) VALUES ('Test Person') RETURNING id")
     card = q(
-        "INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key) "
-        "VALUES ('Test Card', 'Fake Bank', '9999', %s, 'fake') RETURNING id",
+        "INSERT INTO accounts (display_name, institution, last4, owner_person_id, parser_key, account_class, account_type) "
+        "VALUES ('Test Card', 'Fake Bank', '9999', %s, 'fake', 'liability', 'credit_card') RETURNING id",
+        person,
+    )
+    checking = q(
+        "INSERT INTO accounts (display_name, institution, owner_person_id, parser_key, account_class, account_type) "
+        "VALUES ('Test Checking', 'Fake Bank', %s, NULL, 'asset', 'checking') RETURNING id",
         person,
     )
     batch = q(
-        "INSERT INTO import_batches (card_id, filename, file_sha256, rows_in_file, rows_inserted, "
+        "INSERT INTO import_batches (account_id, filename, file_sha256, rows_in_file, rows_inserted, "
         "rows_duplicate, rows_excluded) VALUES (%s, 'fake.csv', %s, 0, 0, 0, 0) RETURNING id",
         card, "a" * 64,
     )
     top = q("INSERT INTO categories (name) VALUES ('Test Top') RETURNING id")
     sub = q("INSERT INTO categories (name, parent_id) VALUES ('Test Sub', %s) RETURNING id", top)
     sub2 = q("INSERT INTO categories (name, parent_id) VALUES ('Test Sub 2', %s) RETURNING id", top)
-    return {"person": person, "card": card, "batch": batch, "top": top, "sub": sub, "sub2": sub2}
+    income_top = q("INSERT INTO categories (name, kind) VALUES ('Test Income', 'income') RETURNING id")
+    income = q("INSERT INTO categories (name, parent_id) VALUES ('Test Pay', %s) RETURNING id", income_top)
+    return {"person": person, "card": card, "checking": checking, "batch": batch, "top": top, "sub": sub,
+            "sub2": sub2, "income_top": income_top, "income": income}
 
 
 @pytest.fixture
 def add_card_txn(conn, basics):
-    """Insert a card transaction with sensible fake defaults; returns its id."""
+    """Insert an imported card transaction (an expense unless told otherwise); returns its id."""
     counter = iter(range(1, 10_000))
 
     def _add(amount_cents=1234, txn_date="2026-01-15", posted_date="2026-01-16", **extra):
         cols = {
-            "source": "card",
-            "card_id": basics["card"],
+            "source": "import",
+            "account_id": basics["card"],
+            "kind": "expense",
+            "kind_source": "parser",
             "import_batch_id": basics["batch"],
             "txn_date": txn_date,
             "posted_date": posted_date,

@@ -24,7 +24,7 @@ def test_expected_tables_exist(conn):
     ).fetchall()
     tables = {r[0] for r in rows}
     assert {
-        "people", "cards", "categories", "import_batches",
+        "people", "accounts", "categories", "import_batches", "transfers", "balance_snapshots",
         "transactions", "splits", "rules", "budgets", "schema_migrations",
     } <= tables
 

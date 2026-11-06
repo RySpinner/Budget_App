@@ -20,8 +20,8 @@ def db(committed_database_url, tmp_path_factory):
         seed_categories(conn, load_toml(CATEGORIES_FILE))
         person = conn.execute("INSERT INTO people (name) VALUES ('Pat') RETURNING id").fetchone()[0]
         card = conn.execute(
-            "INSERT INTO cards (display_name, issuer, owner_person_id, parser_key) "
-            "VALUES ('Citi', 'Citi', %s, 'citi') RETURNING id", (person,),
+            "INSERT INTO accounts (account_class, account_type, display_name, institution, owner_person_id, parser_key) "
+            "VALUES ('liability', 'credit_card', 'Citi', 'Citi', %s, 'citi') RETURNING id", (person,),
         ).fetchone()[0]
         commit_import(conn, preview_import(conn, card, "s.csv", FIXTURE.read_bytes()),
                       archive=tmp_path_factory.mktemp("a"))
@@ -52,9 +52,10 @@ def test_manual_entry_form(app, db):
     assert "Added Farmers market (\\$12.34)" in app.success[0].value   # "$" escaped for markdown
     with psycopg.connect(db) as conn:
         row = conn.execute(
-            "SELECT source, amount_cents, card_id FROM transactions WHERE raw_description = 'Farmers market'"
+            "SELECT t.source, t.amount_cents, a.display_name FROM transactions t JOIN accounts a ON a.id = t.account_id "
+            "WHERE t.raw_description = 'Farmers market'"
         ).fetchone()
-    assert row == ("manual", 1234, None)
+    assert row == ("manual", 1234, "Cash")   # manual entries go in the Cash account by default
 
 
 def test_bad_manual_amount_shows_error(app):

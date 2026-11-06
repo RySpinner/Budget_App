@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from budget.importer import commit_import, detect_card, preview_import, undo_import
+from budget.importer import commit_import, detect_account, preview_import, undo_import
 from budget.rules import create_rule
 
 FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "sample.csv"
@@ -12,8 +12,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "citi" / "sample.csv"
 def citi_card(conn):
     person = conn.execute("INSERT INTO people (name) VALUES ('Importer Person') RETURNING id").fetchone()[0]
     card = conn.execute(
-        "INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key) "
-        "VALUES ('Fake Citi', 'Citi', '0000', %s, 'citi') RETURNING id",
+        "INSERT INTO accounts (display_name, institution, last4, owner_person_id, parser_key, account_class, account_type) "
+        "VALUES ('Fake Citi', 'Citi', '0000', %s, 'citi', 'liability', 'credit_card') RETURNING id",
         (person,),
     ).fetchone()[0]
     return {"card": card, "person": person}
@@ -22,10 +22,11 @@ def citi_card(conn):
 def test_preview_counts(conn, citi_card):
     p = preview_import(conn, citi_card["card"], "sample.csv", FIXTURE.read_bytes())
     assert p.rows_in_file == 8
-    assert len(p.new_rows) == 5          # 3 purchases incl. two identical coffees, 1 big one, 1 refund
+    assert len(p.new_rows) == 7          # 4 purchases incl. two identical coffees, 1 refund, 2 card payments
     assert len(p.duplicate_rows) == 0
-    assert len(p.excluded_rows) == 3     # 2 payments + 1 pending
-    assert p.uncategorized_count == 5
+    assert len(p.excluded_rows) == 1     # the pending row
+    assert p.uncategorized_count == 5    # card payments are transfers: they never need a category
+    assert p.transfer_count == 2
 
 
 def test_preview_writes_nothing(conn, citi_card):
@@ -49,14 +50,14 @@ def test_commit_inserts_and_archives(conn, citi_card, tmp_path):
         "SELECT rows_in_file, rows_inserted, rows_duplicate, rows_excluded FROM import_batches WHERE id = %s",
         (batch,),
     ).fetchone()
-    assert row == (8, 5, 0, 3)
+    assert row == (8, 7, 0, 1)
 
     txn = conn.execute(
         "SELECT amount_cents, merchant, purchaser_id, source, category_id, raw_row->>'Debit' "
         "FROM transactions WHERE import_batch_id = %s ORDER BY txn_date DESC, id LIMIT 1",
         (batch,),
     ).fetchone()
-    assert txn == (4217, "FAKE AUTO PARTS", citi_card["person"], "card", None, "$42.17 ")
+    assert txn == (4217, "FAKE AUTO PARTS", citi_card["person"], "import", None, "$42.17 ")
 
     archived = tmp_path / f"{batch:06d}_sample.csv"
     assert archived.read_bytes() == FIXTURE.read_bytes()
@@ -68,7 +69,7 @@ def test_reimport_is_all_duplicates(conn, citi_card, tmp_path):
 
     again = preview_import(conn, citi_card["card"], "sample.csv", data)
     assert len(again.new_rows) == 0
-    assert len(again.duplicate_rows) == 5
+    assert len(again.duplicate_rows) == 7
     assert again.already_imported_batch_ids
 
 
@@ -85,14 +86,14 @@ def test_overlapping_file_only_adds_new_rows(conn, citi_card, tmp_path):
     later = header + b"\r\n" + extra + rest
     p = preview_import(conn, citi_card["card"], "later.csv", later)
     assert sorted(n.parsed.amount_cents for n in p.new_rows) == [450, 999]
-    assert len(p.duplicate_rows) == 5
+    assert len(p.duplicate_rows) == 7
 
 
 def test_undo_deletes_rows_and_allows_reimport(conn, citi_card, tmp_path):
     data = FIXTURE.read_bytes()
     batch = commit_import(conn, preview_import(conn, citi_card["card"], "sample.csv", data), archive=tmp_path)
 
-    assert undo_import(conn, batch) == 5
+    assert undo_import(conn, batch) == 7
     assert conn.execute("SELECT count(*) FROM transactions WHERE import_batch_id = %s", (batch,)).fetchone()[0] == 0
     assert conn.execute("SELECT reverted_at IS NOT NULL FROM import_batches WHERE id = %s", (batch,)).fetchone()[0]
 
@@ -100,37 +101,37 @@ def test_undo_deletes_rows_and_allows_reimport(conn, citi_card, tmp_path):
         undo_import(conn, batch)
 
     again = preview_import(conn, citi_card["card"], "sample.csv", data)
-    assert len(again.new_rows) == 5
+    assert len(again.new_rows) == 7
     assert again.already_imported_batch_ids == []
 
 
 def test_unknown_parser_key(conn, citi_card):
-    conn.execute("UPDATE cards SET parser_key = 'nope' WHERE id = %s", (citi_card["card"],))
+    conn.execute("UPDATE accounts SET parser_key = 'nope' WHERE id = %s", (citi_card["card"],))
     with pytest.raises(ValueError, match="No parser"):
         preview_import(conn, citi_card["card"], "sample.csv", FIXTURE.read_bytes())
 
 
-def test_detect_card_single_match(conn, citi_card):
-    assert detect_card(conn, FIXTURE.read_bytes()) == citi_card["card"]
+def test_detect_account_single_match(conn, citi_card):
+    assert detect_account(conn, FIXTURE.read_bytes()) == citi_card["card"]
 
 
-def test_detect_card_two_citi_cards_is_unsure(conn, citi_card):
+def test_detect_account_two_citi_cards_is_unsure(conn, citi_card):
     conn.execute(
-        "INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key) "
-        "VALUES ('Other Citi', 'Citi', '5555', %s, 'citi')",
+        "INSERT INTO accounts (display_name, institution, last4, owner_person_id, parser_key, account_class, account_type) "
+        "VALUES ('Other Citi', 'Citi', '5555', %s, 'citi', 'liability', 'credit_card')",
         (citi_card["person"],),
     )
-    assert detect_card(conn, FIXTURE.read_bytes()) is None
+    assert detect_account(conn, FIXTURE.read_bytes()) is None
 
 
-def test_detect_card_ignores_masked_number(conn, citi_card):
+def test_detect_account_ignores_masked_number(conn, citi_card):
     # The fixture's masked number is 0000; a card with different last4 still matches.
-    conn.execute("UPDATE cards SET last4 = '4321' WHERE id = %s", (citi_card["card"],))
-    assert detect_card(conn, FIXTURE.read_bytes()) == citi_card["card"]
+    conn.execute("UPDATE accounts SET last4 = '4321' WHERE id = %s", (citi_card["card"],))
+    assert detect_account(conn, FIXTURE.read_bytes()) == citi_card["card"]
 
 
-def test_detect_card_unreadable_file(conn, citi_card):
-    assert detect_card(conn, b"Date,Amount\n01/01/2026,1.00\n") is None
+def test_detect_account_unreadable_file(conn, citi_card):
+    assert detect_account(conn, b"Date,Amount\n01/01/2026,1.00\n") is None
 
 
 def test_rules_apply_during_import(conn, citi_card, tmp_path):
@@ -152,26 +153,26 @@ def test_rules_apply_during_import(conn, citi_card, tmp_path):
     assert rows == [(coffee, "rule", rule_id, "Fake Coffee")] * 2
 
 
-def test_detect_card_picks_by_bank_format(conn, citi_card):
+def test_detect_account_picks_by_bank_format(conn, citi_card):
     chase_card = conn.execute(
-        "INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key) "
-        "VALUES ('Fake Chase', 'Chase', '2222', %s, 'chase') RETURNING id",
+        "INSERT INTO accounts (display_name, institution, last4, owner_person_id, parser_key, account_class, account_type) "
+        "VALUES ('Fake Chase', 'Chase', '2222', %s, 'chase', 'liability', 'credit_card') RETURNING id",
         (citi_card["person"],),
     ).fetchone()[0]
     chase_file = (Path(__file__).parent / "fixtures" / "chase" / "sample.csv").read_bytes()
-    assert detect_card(conn, FIXTURE.read_bytes()) == citi_card["card"]
-    assert detect_card(conn, chase_file) == chase_card
+    assert detect_account(conn, FIXTURE.read_bytes()) == citi_card["card"]
+    assert detect_account(conn, chase_file) == chase_card
 
 
 def test_chase_import_uses_transaction_date_and_keeps_post_date(conn, citi_card, tmp_path):
     card = conn.execute(
-        "INSERT INTO cards (display_name, issuer, owner_person_id, parser_key) "
-        "VALUES ('Fake Chase 2', 'Chase', %s, 'chase') RETURNING id",
+        "INSERT INTO accounts (account_class, account_type, display_name, institution, owner_person_id, parser_key) "
+        "VALUES ('liability', 'credit_card', 'Fake Chase 2', 'Chase', %s, 'chase') RETURNING id",
         (citi_card["person"],),
     ).fetchone()[0]
     data = (Path(__file__).parent / "fixtures" / "chase" / "sample.csv").read_bytes()
     p = preview_import(conn, card, "chase.csv", data)
-    assert (len(p.new_rows), len(p.excluded_rows)) == (6, 2)
+    assert (len(p.new_rows), len(p.excluded_rows)) == (7, 1)   # the payment is now kept as a transfer
     batch = commit_import(conn, p, archive=tmp_path)
     row = conn.execute(
         "SELECT txn_date, posted_date, effective_date, amount_cents FROM transactions "
@@ -179,4 +180,35 @@ def test_chase_import_uses_transaction_date_and_keeps_post_date(conn, citi_card,
     ).fetchone()
     assert [str(v) for v in row[:3]] + [row[3]] == ["2026-10-29", "2026-10-30", "2026-10-29", 888]
     again = preview_import(conn, card, "chase.csv", data)
-    assert (len(again.new_rows), len(again.duplicate_rows)) == (0, 6)
+    assert (len(again.new_rows), len(again.duplicate_rows)) == (0, 7)
+
+
+
+def test_card_payments_stored_as_transfers(conn, citi_card, tmp_path):
+    batch = commit_import(conn, preview_import(conn, citi_card["card"], "sample.csv", FIXTURE.read_bytes()),
+                          archive=tmp_path)
+    rows = conn.execute(
+        "SELECT kind, kind_source, category_id, transfer_id, amount_cents FROM transactions "
+        "WHERE import_batch_id = %s AND kind = 'transfer' ORDER BY amount_cents", (batch,),
+    ).fetchall()
+    assert rows == [("transfer", "parser", None, None, -50000), ("transfer", "parser", None, None, -25000)]
+    # Transfers never show up as spending.
+    assert conn.execute("SELECT count(*) FROM spending_lines WHERE transaction_id IN "
+                        "(SELECT id FROM transactions WHERE kind = 'transfer')").fetchone()[0] == 0
+    assert conn.execute("SELECT kind, kind_source FROM transactions WHERE import_batch_id = %s AND amount_cents = 4217",
+                        (batch,)).fetchone() == ("expense", "parser")
+
+
+def test_rules_do_not_apply_to_transfer_rows_on_import(conn, citi_card):
+    top = conn.execute("INSERT INTO categories (name) VALUES ('Imp T') RETURNING id").fetchone()[0]
+    sub = conn.execute("INSERT INTO categories (name, parent_id) VALUES ('Imp S', %s) RETURNING id", (top,)).fetchone()[0]
+    create_rule(conn, "AUTOPAY", sub)   # would match the payment row, but transfers are never categorized
+    p = preview_import(conn, citi_card["card"], "sample.csv", FIXTURE.read_bytes())
+    payment = next(n for n in p.new_rows if "AUTOPAY" in n.parsed.raw_description)
+    assert (payment.rule, payment.kind) == (None, "transfer")
+
+
+def test_hand_entered_account_cannot_import(conn, citi_card):
+    cash = conn.execute("SELECT id FROM accounts WHERE account_type = 'cash'").fetchone()[0]
+    with pytest.raises(ValueError, match="entered by hand"):
+        preview_import(conn, cash, "x.csv", FIXTURE.read_bytes())

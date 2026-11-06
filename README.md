@@ -2,7 +2,7 @@
 
 Python + Streamlit + PostgreSQL, running on a Raspberry Pi. See `SPEC.md` for requirements and `CLAUDE.md` for working rules.
 
-**Status:** Phases 1–7 are done: schema and seed data, the Citi parser and import pipeline, the Import page, categorization rules (Review and Rules pages), the Transactions page, budgets with the Dashboard, and deployment on the Pi (service, password, backups). **To install on the Pi, follow [docs/deploy.md](docs/deploy.md).** Later phases are listed in SPEC.md section 10.
+**Status:** v1 (phases 1–7: credit-card spending, deployed on the Pi) is done. v2 is under way (SPEC.md): phase 8, the accounts foundation, is done; bank parsers, transfer matching and balances come next. **To install on the Pi, follow [docs/deploy.md](docs/deploy.md).** Later phases are listed in SPEC.md section 10.
 
 ## Setup
 
@@ -15,7 +15,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy config\secrets.example.toml config\secrets.toml   # then edit: real DB credentials
-copy seed\local.example.toml seed\local.toml           # then edit: real names and cards
+copy seed\local.example.toml seed\local.toml           # then edit: real names and accounts
 ```
 
 If PowerShell refuses to run `Activate.ps1` ("running scripts is disabled"), run this once and then try again:
@@ -29,7 +29,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp config/secrets.example.toml config/secrets.toml   # then edit: real DB credentials
-cp seed/local.example.toml seed/local.toml           # then edit: real names and cards
+cp seed/local.example.toml seed/local.toml           # then edit: real names and accounts
 ```
 
 Activate the environment again in each new terminal before running the commands below.
@@ -60,12 +60,12 @@ To start the database over, connect as `postgres` to the `postgres` database and
 ```bash
 python -m budget.migrate            # apply pending migrations
 python -m budget.migrate --status   # show applied / pending
-python -m budget.seed               # add missing categories, people, cards (safe to re-run)
+python -m budget.seed               # add missing categories, people, accounts (safe to re-run)
 ```
 
-- After pulling new code, run `python -m budget.migrate` again: it applies any new migrations (e.g. `0003_monthly_totals.sql`) and skips ones already applied.
+- After pulling new code, run `python -m budget.migrate` again: it applies any new migrations (e.g. `0004_accounts.sql`) and skips ones already applied.
 - **Migrations** are numbered SQL files in `migrations/`. Never edit one that has been applied; add a new file instead. The runner wraps each file in a transaction and records it in `schema_migrations`.
-- **Seeding** only inserts rows that are missing (matched by name). It never renames or deletes, so edits made later in the app are safe. If `local.toml` disagrees with an existing card, it prints a warning; change that card in the database instead, e.g. `UPDATE cards SET parser_key = 'citi' WHERE id = 1;`.
+- **Seeding** only inserts rows that are missing (matched by name). It never renames or deletes, so edits made later in the app are safe. If `local.toml` disagrees with an existing account, it prints a warning; change that account in the database instead, e.g. `UPDATE accounts SET parser_key = 'citi' WHERE id = 2;`.
 - **Adding a category:** add it to `seed/categories.toml` and run `python -m budget.seed`. To retire one, set `active = false` in the database rather than deleting it; if you rename one, rename it in the TOML file too.
 
 ## Running the app
@@ -85,10 +85,10 @@ Then open http://localhost:8501. Pages:
 
 - **Dashboard** (start page) shows the month's spending against budget pace for each category. Pace = budget × day of month ÷ days in month. It also shows the last 12 months by category and a drill-down from one category to its subcategories. Every chart has a table.
 - **Budgets:** set each top-level category's monthly amount from a chosen month onward. Earlier months keep their old budget.
-- The **Import** page takes CSV uploads (drag and drop, several at once). It picks the card when only one active card's parser can read the file, shows a preview (new / duplicate / excluded), and writes nothing until you click Import. Past imports are listed below it, with undo.
+- The **Import** page takes CSV uploads (drag and drop, several at once). It picks the account when only one active account's parser can read the file, shows a preview (new / duplicate / excluded / uncategorized / transfers), and writes nothing until you click Import. Past imports are listed below it, with undo.
 
 - **Review** lists uncategorized transactions. Pick a category for any row; tick *Save as rule* to also create a rule (pre-filled pattern, editable) that categorizes matching rows from now on.
-- **Transactions** shows every spending line with filters for month, category, subcategory, card and purchaser. Choosing one top-level category gives the old per-sheet layout: date, amount, running monthly total, merchant, card, budget-to-date, note, purchaser. Edit category, note and purchaser in the table and press Save. Below the table you can split a transaction across categories (lines must add up exactly), delete a manual entry, and add a cash / manual entry.
+- **Transactions** shows spending by default; the **Kind** filter switches to income, transfers, rows whose kind isn't known yet, or everything. Further filters: month, category, subcategory, account and purchaser. Choosing one top-level category gives the old per-sheet layout: date, amount, running monthly total, merchant, account, budget-to-date, note, purchaser. Edit category (or choose *Transfer between our accounts*), note and purchaser in the table and press Save. Below the table you can split a spending or income row across categories (lines must add up exactly), delete a manual entry, and add a manual entry (the Cash account by default).
 - **Rules** lists every rule with how many transactions it currently covers. Edit, deactivate or delete rules, or add new ones, then re-run them. Rules are tried by priority (lower first) and the first match wins. Rules never change a category you chose by hand.
 
 Rules also run automatically on new rows during import; the preview shows which category each row will get. To re-run all rules from the command line: `python -m budget.rules`.
@@ -96,13 +96,13 @@ Rules also run automatically on new rows during import; the preview shows which 
 ## Importing from the command line
 
 ```bash
-python -m budget.import_csv --cards                    # find the card id
-python -m budget.import_csv --card 1 export.csv        # preview, then confirm
+python -m budget.import_csv --accounts                 # find the account id
+python -m budget.import_csv --account 2 export.csv    # preview, then confirm
 python -m budget.import_csv --batches                  # past imports
 python -m budget.import_csv --undo 7                   # undo batch 7
 ```
 
-Each card's `parser_key` picks its parser: `citi` or `chase`. When the Import page can tell from a file's format which single card it belongs to, it picks the card automatically. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
+Each account's `parser_key` picks its parser: `citi` or `chase` so far (bank parsers come in phase 9). When the Import page can tell from a file's format which single account it belongs to, it picks the account automatically. Card payments are kept as **transfers** (money moving between your own accounts), never counted as spending. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
 
 ## Tests
 
@@ -134,9 +134,9 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 ```
 app/           Streamlit app (streamlit_app.py, views/ = one file per page, charts.py, ui.py, auth_gate.py)
 budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions, budgets, reports
-budget/parsers one module per card issuer (citi.py, chase.py), sharing base.ParsedRow
+budget/parsers one module per institution (citi.py, chase.py), sharing base.ParsedRow
 migrations/    versioned schema changes
-seed/          categories.toml (tracked), local.toml (untracked: people and cards)
+seed/          categories.toml (tracked), local.toml (untracked: people and accounts)
 config/        secrets.toml (untracked)
 deploy/        Pi files: systemd service + backup timer, backup / restore / restore-test scripts
 docs/          deploy.md (Pi setup guide), sessions/ (build session notes)

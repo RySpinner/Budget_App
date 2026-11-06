@@ -10,8 +10,9 @@ import streamlit as st
 from budget.categories import subcategory_choices
 from app.ui import md
 from budget.db import connect
-from budget.importer import commit_import, detect_card, preview_import, undo_import
+from budget.importer import commit_import, detect_account, preview_import, undo_import
 from budget.money import format_cents
+from budget.parsers.base import describe
 
 state = st.session_state
 state.setdefault("uploader_round", 0)     # bump to clear the file uploader
@@ -27,25 +28,25 @@ if state.flash:
 
 try:
     with connect() as conn:
-        cards = conn.execute(
-            "SELECT id, display_name FROM cards WHERE active ORDER BY display_name"
+        accounts = conn.execute(
+            "SELECT id, display_name FROM accounts WHERE active AND parser_key IS NOT NULL ORDER BY display_name"
         ).fetchall()
         category_names = subcategory_choices(conn, include_inactive=True)
 except Exception as e:  # e.g. database not reachable
     st.error(md(f"Could not connect to the database: {e}"))
     st.stop()
 
-card_names = dict(cards)
+account_names = dict(accounts)
 
-if not cards:
-    st.warning(md("No cards set up yet. Add them to seed/local.toml and run `python -m budget.seed`."))
+if not accounts:
+    st.warning(md("No importable accounts set up yet. Add them to seed/local.toml and run `python -m budget.seed`."))
     st.stop()
 
 
 def rows_table(rows) -> pd.DataFrame:
     """Rows for display. Amounts are shown as text, so no floats are involved.
 
-    `rows` holds (ParsedRow, merchant, matching rule or None).
+    `rows` holds (ParsedRow, merchant, matching rule or None, kind it will be stored as).
     """
     return pd.DataFrame(
         [
@@ -53,11 +54,11 @@ def rows_table(rows) -> pd.DataFrame:
                 "Date": r.txn_date or r.posted_date,
                 "Amount": format_cents(r.amount_cents),
                 "Merchant": merchant,
-                "Type": r.exclude_reason or r.kind,
+                "Type": describe(kind, r.amount_cents, r.reason),
                 "Category (from rules)": category_names.get(rule.category_id) if rule else "",
                 "Bank description": r.raw_description,
             }
-            for r, merchant, rule in rows
+            for r, merchant, rule, kind in rows
         ]
     )
 
@@ -66,7 +67,7 @@ def rows_table(rows) -> pd.DataFrame:
 # Upload and preview
 # ---------------------------------------------------------------------------
 uploaded = st.file_uploader(
-    "Drop card CSV exports here",
+    "Drop account CSV exports here",
     type=["csv"],
     accept_multiple_files=True,
     key=f"uploader_{state.uploader_round}",
@@ -82,33 +83,36 @@ for f in uploaded or []:
             continue
 
         with connect() as conn:
-            detected = detect_card(conn, data)
-        ids = list(card_names)
-        card_id = st.selectbox(
-            "Card",
+            detected = detect_account(conn, data)
+        ids = list(account_names)
+        account_id = st.selectbox(
+            "Account",
             options=ids,
             index=ids.index(detected) if detected in ids else None,
-            format_func=card_names.get,
-            placeholder="Choose which card this export is from",
-            key=f"card_{f.file_id}",
+            format_func=account_names.get,
+            placeholder="Choose which account this export is from",
+            key=f"account_{f.file_id}",
         )
-        if detected is not None and card_id == detected:
-            st.caption("Card detected from the file.")
-        if card_id is None:
+        if detected is not None and account_id == detected:
+            st.caption("Account detected from the file.")
+        if account_id is None:
             continue
 
         try:
             with connect() as conn:
-                preview = preview_import(conn, card_id, f.name, data)
+                preview = preview_import(conn, account_id, f.name, data)
         except ValueError as e:
             st.error(md(str(e)))
             continue
 
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("New", len(preview.new_rows))
         c2.metric("Duplicate", len(preview.duplicate_rows))
         c3.metric("Excluded", len(preview.excluded_rows))
         c4.metric("Uncategorized", preview.uncategorized_count)
+        c5.metric("Transfers", preview.transfer_count,
+                  help="Moves between your own accounts, e.g. a card payment. Linking them to the other "
+                       "account's side comes in a later phase; they never count as spending.")
 
         if preview.already_imported_batch_ids:
             batches = ", ".join(map(str, preview.already_imported_batch_ids))
@@ -117,19 +121,20 @@ for f in uploaded or []:
         if preview.new_rows:
             st.markdown("**New rows**")
             st.dataframe(
-                rows_table([(n.parsed, n.merchant, n.rule) for n in preview.new_rows]),
+                rows_table([(n.parsed, n.merchant, n.rule, n.kind) for n in preview.new_rows]),
                 hide_index=True, width="stretch",
             )
         else:
             st.write("Nothing new in this file.")
 
         if preview.excluded_rows:
-            with st.expander(f"Excluded rows ({len(preview.excluded_rows)}): not recorded as spending"):
-                st.dataframe(rows_table([(r, "", None) for r in preview.excluded_rows]), hide_index=True, width="stretch")
+            with st.expander(f"Excluded rows ({len(preview.excluded_rows)}): not stored"):
+                st.dataframe(rows_table([(r, "", None, r.kind) for r in preview.excluded_rows]),
+                             hide_index=True, width="stretch")
         if preview.duplicate_rows:
             with st.expander(f"Duplicate rows ({len(preview.duplicate_rows)}): already in the database"):
                 st.dataframe(
-                    rows_table([(n.parsed, n.merchant, None) for n in preview.duplicate_rows]),
+                    rows_table([(n.parsed, n.merchant, None, n.kind) for n in preview.duplicate_rows]),
                     hide_index=True, width="stretch",
                 )
 
@@ -159,7 +164,7 @@ with connect() as conn:
         """
         SELECT b.id, b.imported_at, c.display_name, b.filename, b.rows_in_file,
                b.rows_inserted, b.rows_duplicate, b.rows_excluded, b.reverted_at
-          FROM import_batches b JOIN cards c ON c.id = b.card_id
+          FROM import_batches b JOIN accounts c ON c.id = b.account_id
          ORDER BY b.id DESC
         """
     ).fetchall()
@@ -173,7 +178,7 @@ else:
                 {
                     "Batch": b[0],
                     "Imported": b[1].strftime("%Y-%m-%d %H:%M"),
-                    "Card": b[2],
+                    "Account": b[2],
                     "File": b[3],
                     "Rows": b[4],
                     "Added": b[5],

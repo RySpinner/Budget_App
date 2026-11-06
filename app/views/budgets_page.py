@@ -33,7 +33,7 @@ with connect() as conn:
     rows = conn.execute(
         """
         SELECT id, name, budget_for_month(id, %s)
-          FROM categories WHERE parent_id IS NULL AND active
+          FROM categories WHERE parent_id IS NULL AND active AND kind = 'expense'
          ORDER BY sort_order, name
         """,
         (from_month,),

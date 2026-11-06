@@ -4,8 +4,8 @@ Nothing is written to the database until commit_import() is called with a
 preview, so the UI (Phase 3) and the command line can both show the counts
 first and ask for confirmation.
 
-Deduplication (SPEC section 5, step 3): each row gets a fingerprint built
-from card, dates, amount, normalized description and an occurrence index,
+Deduplication (SPEC section 5, step 4): each row gets a fingerprint built
+from account, dates, amount, normalized description and an occurrence index,
 where the nth identical row within one file gets index n. Two same-price
 coffees on one day are therefore both kept, while importing an overlapping
 file again inserts nothing new.
@@ -33,11 +33,22 @@ class NewRow:
     merchant: str
     rule: Rule | None = None   # the categorization rule that matched, if any
 
+    @property
+    def kind(self) -> str | None:
+        """What the row will be stored as: the matching rule's category kind, else the parser's kind."""
+        return self.rule.category_kind if self.rule else self.parsed.kind
+
+    @property
+    def kind_source(self) -> str | None:
+        if self.kind is None:
+            return None
+        return "parser" if self.kind == self.parsed.kind else "rule"
+
 
 @dataclass
 class ImportPreview:
-    card_id: int
-    card_name: str
+    account_id: int
+    account_name: str
     purchaser_id: int
     filename: str
     file_bytes: bytes
@@ -50,16 +61,22 @@ class ImportPreview:
 
     @property
     def uncategorized_count(self) -> int:
-        return sum(1 for n in self.new_rows if n.rule is None)
+        """New rows that will need a category in Review (transfers don't have one)."""
+        return sum(1 for n in self.new_rows if n.rule is None and n.kind != "transfer")
+
+    @property
+    def transfer_count(self) -> int:
+        """New transfer legs (e.g. card payments). Matching them to the other account comes in phase 10."""
+        return sum(1 for n in self.new_rows if n.kind == "transfer")
 
 
 def normalize_description(text: str) -> str:
     return " ".join(text.upper().split())
 
 
-def fingerprint(card_id: int, row: ParsedRow, occurrence: int) -> str:
+def fingerprint(account_id: int, row: ParsedRow, occurrence: int) -> str:
     parts = [
-        str(card_id),
+        str(account_id),
         row.txn_date.isoformat() if row.txn_date else "",
         row.posted_date.isoformat() if row.posted_date else "",
         str(row.amount_cents),
@@ -69,14 +86,14 @@ def fingerprint(card_id: int, row: ParsedRow, occurrence: int) -> str:
     return hashlib.sha256("|".join(parts).encode()).hexdigest()
 
 
-def fingerprint_rows(card_id: int, rows: list[ParsedRow]) -> list[tuple[ParsedRow, str]]:
+def fingerprint_rows(account_id: int, rows: list[ParsedRow]) -> list[tuple[ParsedRow, str]]:
     """Fingerprint each row, numbering identical rows 1, 2, 3... within the file."""
     seen = Counter()
     result = []
     for row in rows:
         key = (row.txn_date, row.posted_date, row.amount_cents, normalize_description(row.raw_description))
         seen[key] += 1
-        result.append((row, fingerprint(card_id, row, seen[key])))
+        result.append((row, fingerprint(account_id, row, seen[key])))
     return result
 
 
@@ -87,18 +104,20 @@ def decode_csv(data: bytes) -> str:
         return data.decode("cp1252")  # some banks still export Windows-1252
 
 
-def detect_card(conn: psycopg.Connection, data: bytes) -> int | None:
-    """Guess which active card a file belongs to, or None if unsure.
+def detect_account(conn: psycopg.Connection, data: bytes) -> int | None:
+    """Guess which active account a file belongs to, or None if unsure.
 
-    A card fits if its parser can read the file. The guess is used only when
-    exactly one active card fits; with two cards from the same bank, the user
-    picks. (Masked card numbers inside descriptions are often per-merchant
-    virtual numbers, so they are not used.)
+    An account fits if its parser can read the file. The guess is used only
+    when exactly one active account fits; with two accounts from the same
+    bank, the user picks. (Masked card numbers inside descriptions are often
+    per-merchant virtual numbers, so they are not used.)
     """
     text = decode_csv(data)
     readable: dict[str, bool] = {}
     candidates = []
-    for card_id, parser_key in conn.execute("SELECT id, parser_key FROM cards WHERE active ORDER BY id"):
+    for account_id, parser_key in conn.execute(
+        "SELECT id, parser_key FROM accounts WHERE active AND parser_key IS NOT NULL ORDER BY id"
+    ):
         if parser_key not in readable:
             try:
                 PARSERS[parser_key](text)
@@ -106,17 +125,19 @@ def detect_card(conn: psycopg.Connection, data: bytes) -> int | None:
             except (KeyError, ValueError):
                 readable[parser_key] = False
         if readable[parser_key]:
-            candidates.append(card_id)
+            candidates.append(account_id)
     return candidates[0] if len(candidates) == 1 else None
 
 
-def preview_import(conn: psycopg.Connection, card_id: int, filename: str, data: bytes) -> ImportPreview:
-    card = conn.execute(
-        "SELECT display_name, parser_key, owner_person_id FROM cards WHERE id = %s", (card_id,)
+def preview_import(conn: psycopg.Connection, account_id: int, filename: str, data: bytes) -> ImportPreview:
+    account = conn.execute(
+        "SELECT display_name, parser_key, owner_person_id FROM accounts WHERE id = %s", (account_id,)
     ).fetchone()
-    if card is None:
-        raise ValueError(f"No card with id {card_id}")
-    card_name, parser_key, owner_id = card
+    if account is None:
+        raise ValueError(f"No account with id {account_id}")
+    account_name, parser_key, owner_id = account
+    if parser_key is None:
+        raise ValueError(f"{account_name} has no parser; its transactions are entered by hand")
 
     parsed = get_parser(parser_key)(decode_csv(data))
     kept = [r for r in parsed if r.kind != "excluded"]
@@ -124,8 +145,8 @@ def preview_import(conn: psycopg.Connection, card_id: int, filename: str, data: 
 
     rules = load_rules(conn)
     candidates = []
-    for row, fp in fingerprint_rows(card_id, kept):
-        rule = first_match(rules, row.raw_description, card_id, row.amount_cents)
+    for row, fp in fingerprint_rows(account_id, kept):
+        rule = first_match(rules, row.raw_description, account_id, row.amount_cents, row.kind)
         merchant = rule.merchant_name if rule and rule.merchant_name else clean_merchant(row.raw_description)
         candidates.append(NewRow(parsed=row, fingerprint=fp, merchant=merchant, rule=rule))
     existing = {
@@ -144,8 +165,8 @@ def preview_import(conn: psycopg.Connection, card_id: int, filename: str, data: 
     ]
 
     return ImportPreview(
-        card_id=card_id,
-        card_name=card_name,
+        account_id=account_id,
+        account_name=account_name,
         purchaser_id=owner_id,
         filename=Path(filename).name,
         file_bytes=data,
@@ -169,11 +190,11 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
         batch_id = conn.execute(
             """
             INSERT INTO import_batches
-                (card_id, filename, file_sha256, rows_in_file, rows_inserted, rows_duplicate, rows_excluded)
+                (account_id, filename, file_sha256, rows_in_file, rows_inserted, rows_duplicate, rows_excluded)
             VALUES (%s, %s, %s, %s, 0, 0, %s)
             RETURNING id
             """,
-            (preview.card_id, preview.filename, preview.file_sha256, preview.rows_in_file, len(preview.excluded_rows)),
+            (preview.account_id, preview.filename, preview.file_sha256, preview.rows_in_file, len(preview.excluded_rows)),
         ).fetchone()[0]
 
         inserted = 0
@@ -182,14 +203,14 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
             cur = conn.execute(
                 """
                 INSERT INTO transactions
-                    (source, card_id, txn_date, posted_date, amount_cents, raw_description, merchant,
-                     category_id, category_source, rule_id,
+                    (source, account_id, txn_date, posted_date, amount_cents, raw_description, merchant,
+                     kind, kind_source, category_id, category_source, rule_id,
                      purchaser_id, fingerprint, import_batch_id, raw_row)
-                VALUES ('card', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES ('import', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (fingerprint) DO NOTHING
                 """,
-                (preview.card_id, row.txn_date, row.posted_date, row.amount_cents, row.raw_description,
-                 new.merchant,
+                (preview.account_id, row.txn_date, row.posted_date, row.amount_cents, row.raw_description,
+                 new.merchant, new.kind, new.kind_source,
                  new.rule.category_id if new.rule else None,
                  "rule" if new.rule else None,
                  new.rule.id if new.rule else None,

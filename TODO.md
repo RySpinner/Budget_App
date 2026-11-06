@@ -8,7 +8,8 @@ decisions to reassess are in DECISIONS.md.
   - check refunds come through as negative spending (DECISIONS.md #12);
   - decide how a fee/interest *reversal* is treated. A refund (negative spending) seems likely, since fees count as spending.
   - Also worth a look if any show up in a year of data: "PAYMENT THANK YOU"-style online payments, and rewards/cash-back credits.
-- [ ] **Review the v2 SPEC** (SPEC.md, rewritten 2026-11-06) and DECISIONS.md #52–60 before phase 8 starts.
+- [ ] **Review DECISIONS.md #52–68** (v2 SPEC interpretations and phase 8 as built).
+- [ ] **On your laptop after pulling phase 8:** run `python -m budget.migrate`, then re-import your card CSVs to fill in the card payments (old rows show up as duplicates).
 - [ ] **Bank samples** for each checking/savings institution: header row plus a debit purchase, a deposit/paycheck, a transfer to savings, a card payment, an ATM withdrawal, and the balance column if there is one (fake amounts are fine; copy from Notepad, not Excel).
 - [ ] **Decide:** rewards / cash-back credits as income or as negative expense; the transfer matching window (default 5 days); how much cash tracking is wanted; the income categories.
 - [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase.
@@ -31,7 +32,7 @@ decisions to reassess are in DECISIONS.md.
 - [x] Phase 5: Transactions page (filters, editing, splits, manual entry)
 - [x] Phase 6: budgets and Dashboard
 - [x] Phase 7: deployment on the Pi (service, password, backups). Code and guide done; the owner still does the Pi setup.
-- [ ] Phase 8: accounts foundation (cards → accounts, Joint, Cash account, kind, transfers, balance snapshots, card payments stored)
+- [x] Phase 8: accounts foundation (cards → accounts, Joint, Cash account, kind, transfers, balance snapshots, card payments stored)
 - [ ] Phase 9: first bank parser(s), with balance snapshots and kind/transfer rules
 - [ ] Phase 10: transfer matching and Review tabs (unmatched transfers, needs care)
 - [ ] Phase 11: cash flow, balances, net worth, reconciliation; Accounts page

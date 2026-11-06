@@ -1,8 +1,10 @@
 # Copy this file to seed/local.toml (which is gitignored) and fill in real
 # values. It holds personal details, so it stays out of git.
 #
-#   cp seed/local.example.toml seed/local.toml
+#   cp seed/local.example.toml seed/local.toml      (Windows: copy seed\local.example.toml seed\local.toml)
 #   python -m budget.seed
+#
+# A "Joint" person and a "Cash" account are created automatically.
 
 [[person]]
 name = "Partner A"
@@ -10,19 +12,35 @@ name = "Partner A"
 [[person]]
 name = "Partner B"
 
-# One entry per credit card. Only the last 4 digits, never the full number.
-# parser_key names the parser for this card's CSV export.
-# Available: "citi", "chase". Several cards from one bank can share a parser.
-[[card]]
-display_name = "Partner A - Example Visa"
-issuer = "Example Bank"
+# One entry per account. Only the last 4 digits, never the full number.
+#   type:       credit_card, checking or savings (also cash; brokerage /
+#               retirement / loan are reserved for later)
+#   owner:      a person above, or "Joint" for joint accounts
+#   parser_key: which parser reads this account's CSV export.
+#               Available: "citi", "chase". Bank parsers come in phase 9.
+#               Leave it out for an account you only enter by hand.
+[[account]]
+display_name = "Partner A - Citi card"
+institution = "Citi"
+type = "credit_card"
 last4 = "0000"
-owner = "Partner A"        # must match a person name above
-parser_key = "example_bank"
+owner = "Partner A"
+parser_key = "citi"
 
-[[card]]
-display_name = "Partner B - Example Mastercard"
-issuer = "Other Bank"
+[[account]]
+display_name = "Partner B - Chase card"
+institution = "Chase"
+type = "credit_card"
 last4 = "1111"
 owner = "Partner B"
-parser_key = "other_bank"
+parser_key = "chase"
+
+[[account]]
+display_name = "Joint checking"
+institution = "Example Bank"
+type = "checking"
+last4 = "2222"
+owner = "Joint"
+
+# Older files with [[card]] entries (display_name, issuer, last4, owner,
+# parser_key) still work; they're treated as credit cards.

@@ -25,11 +25,11 @@ if state.rules_flash:
 
 with connect() as conn:
     choices = subcategory_choices(conn, include_inactive=True)
-    cards = dict(conn.execute("SELECT id, display_name FROM cards ORDER BY display_name").fetchall())
+    accounts = dict(conn.execute("SELECT id, display_name FROM accounts ORDER BY display_name").fetchall())
     rules = conn.execute(
         """
         SELECT r.id, r.active, r.priority, r.match_type, r.pattern, r.category_id, r.merchant_name,
-               r.card_id, r.min_amount_cents, r.max_amount_cents,
+               r.account_id, r.min_amount_cents, r.max_amount_cents,
                (SELECT count(*) FROM transactions t WHERE t.rule_id = r.id) AS used
           FROM rules r
          ORDER BY r.priority, r.id
@@ -37,8 +37,8 @@ with connect() as conn:
     ).fetchall()
 
 label_to_id = {label: cat_id for cat_id, label in choices.items()}
-ANY_CARD = "Any card"
-card_label_to_id = {ANY_CARD: None} | {name: cid for cid, name in cards.items()}
+ANY_ACCOUNT = "Any account"
+account_label_to_id = {ANY_ACCOUNT: None} | {name: aid for aid, name in accounts.items()}
 
 
 def optional_cents(text) -> int | None:
@@ -67,7 +67,7 @@ else:
                 "Pattern": r[4],
                 "Category": choices.get(r[5]),
                 "Merchant name": r[6] or "",
-                "Card": cards.get(r[7], ANY_CARD),
+                "Account": accounts.get(r[7], ANY_ACCOUNT),
                 "Min amount": format_cents(r[8]) if r[8] is not None else "",
                 "Max amount": format_cents(r[9]) if r[9] is not None else "",
                 "Used by": r[10],
@@ -88,7 +88,7 @@ else:
             "Match": st.column_config.SelectboxColumn(options=list(MATCH_TYPES), required=True),
             "Category": st.column_config.SelectboxColumn(options=list(label_to_id), required=True),
             "Merchant name": st.column_config.TextColumn(help="Optional display name to apply"),
-            "Card": st.column_config.SelectboxColumn(options=list(card_label_to_id), required=True),
+            "Account": st.column_config.SelectboxColumn(options=list(account_label_to_id), required=True),
             "Min amount": st.column_config.TextColumn(help="Optional, e.g. 10.00"),
             "Max amount": st.column_config.TextColumn(help="Optional, e.g. 200.00"),
             "Used by": st.column_config.NumberColumn(help="Transactions currently categorized by this rule"),
@@ -110,7 +110,7 @@ else:
                 updates.append((
                     bool(row["Active"]), int(row["Priority"]), row["Match"], str(row["Pattern"]).strip(),
                     label_to_id[row["Category"]], str(row["Merchant name"] or "").strip() or None,
-                    card_label_to_id[row["Card"]], low, high, rule_id,
+                    account_label_to_id[row["Account"]], low, high, rule_id,
                 ))
             except (ValueError, KeyError, TypeError) as e:
                 errors.append(f"Rule with pattern {row['Pattern']!r}: {e}")
@@ -125,7 +125,7 @@ else:
                         conn.execute(
                             """
                             UPDATE rules SET active = %s, priority = %s, match_type = %s, pattern = %s,
-                                   category_id = %s, merchant_name = %s, card_id = %s,
+                                   category_id = %s, merchant_name = %s, account_id = %s,
                                    min_amount_cents = %s, max_amount_cents = %s
                              WHERE id = %s
                             """,

@@ -59,13 +59,18 @@ def applied_versions(conn: psycopg.Connection) -> set[str]:
     return {r[0] for r in rows}
 
 
-def apply_migrations(conn: psycopg.Connection, directory: Path = MIGRATIONS_DIR) -> list[str]:
-    """Apply all pending migrations. Returns the filenames that were applied."""
+def apply_migrations(conn: psycopg.Connection, directory: Path = MIGRATIONS_DIR, up_to: str | None = None) -> list[str]:
+    """Apply pending migrations (all, or only up to and including version `up_to`, e.g. "0003").
+
+    Returns the filenames that were applied.
+    """
     ensure_migrations_table(conn)
     applied_now = []
 
     for path in migration_files(directory):
         version = path.name[:4]
+        if up_to is not None and version > up_to:
+            break
         with conn.transaction():
             conn.execute("SELECT pg_advisory_xact_lock(%s)", (MIGRATION_LOCK_ID,))
             if version in applied_versions(conn):

@@ -9,13 +9,13 @@ Format (seen in a real export, as downloaded):
   payments/returns are positive. We flip it, so spending is positive.
 - The Type column says what a row is, so we use it rather than guessing from
   the description:
-    Sale        -> purchase
-    Return      -> refund (negative spending)
-    Payment     -> excluded (card payment)
-    Fee         -> purchase (interest and fees count as spending)
-    Adjustment  -> purchase or refund by sign, unless it looks like a rewards
-                   redemption, which is excluded
-  Only "Sale" has been seen in a real file so far; the others follow Chase's
+    Sale        -> expense (a purchase)
+    Return      -> expense with a negative amount (a refund)
+    Payment     -> transfer (the card's leg of a payment from another account)
+    Fee         -> expense (interest and fees count as spending)
+    Adjustment  -> expense (purchase or refund by sign), unless it looks like a
+                   rewards redemption, which is excluded (rewards are OPEN)
+  "Sale" and "Payment" are confirmed with real rows; the others follow Chase's
   documented export (see DECISIONS.md).
 - Chase's own Category column ("Food & Drink") is kept in raw_row but not used
   to categorize; our rules do that.
@@ -30,7 +30,7 @@ import re
 from datetime import datetime
 
 from budget.money import parse_cents
-from budget.parsers.base import ParsedRow, kind_for_amount
+from budget.parsers.base import ParsedRow
 
 EXPECTED_COLUMNS = ["Transaction Date", "Post Date", "Description", "Category", "Type", "Amount", "Memo"]
 
@@ -73,22 +73,22 @@ def _parse_row(fields: list[str]) -> ParsedRow:
     row_type = col["Type"].strip().lower()
     amount = -parse_cents(col["Amount"])        # Chase: negative = charge; ours: positive = spending
 
-    reason = None
+    kind, reason = "expense", None          # Sale, Return, Fee, other Adjustments
     if row_type == "payment":
-        reason = "card payment"
+        kind, reason = "transfer", "card payment"
     elif row_type == "adjustment" and REWARDS.search(description):
-        reason = "rewards redemption"
+        kind, reason = "excluded", "rewards redemption"
 
     raw_row = dict(zip(EXPECTED_COLUMNS, fields))
     if len(fields) > len(EXPECTED_COLUMNS):
         raw_row["_extra"] = fields[len(EXPECTED_COLUMNS):]
 
     return ParsedRow(
-        kind="excluded" if reason else kind_for_amount(amount),
+        kind=kind,
         txn_date=txn_date,
         posted_date=posted_date,
         amount_cents=amount,
         raw_description=description,
         raw_row=raw_row,
-        exclude_reason=reason,
+        reason=reason,
     )

@@ -21,8 +21,8 @@ def batch_id(committed_database_url, tmp_path_factory):
     with psycopg.connect(committed_database_url) as conn:
         person = conn.execute("INSERT INTO people (name) VALUES ('Page Person') RETURNING id").fetchone()[0]
         card = conn.execute(
-            "INSERT INTO cards (display_name, issuer, last4, owner_person_id, parser_key) "
-            "VALUES ('Page Citi', 'Citi', '0000', %s, 'citi') RETURNING id",
+            "INSERT INTO accounts (account_class, account_type, display_name, institution, last4, owner_person_id, parser_key) "
+            "VALUES ('liability', 'credit_card', 'Page Citi', 'Citi', '0000', %s, 'citi') RETURNING id",
             (person,),
         ).fetchone()[0]
         preview = preview_import(conn, card, "sample.csv", FIXTURE.read_bytes())
@@ -53,11 +53,11 @@ def test_undo_needs_confirmation(app, committed_database_url, batch_id):
     cancel.click().run()
     assert not app.warning
     with psycopg.connect(committed_database_url) as conn:
-        assert conn.execute("SELECT count(*) FROM transactions").fetchone()[0] == 5
+        assert conn.execute("SELECT count(*) FROM transactions").fetchone()[0] == 7
 
     next(b for b in app.button if b.label == "Undo…").click().run()
     next(b for b in app.button if b.label == "Yes, undo it").click().run()
-    assert "undone; 5 transactions deleted" in app.success[0].value
+    assert "undone; 7 transactions deleted" in app.success[0].value
     with psycopg.connect(committed_database_url) as conn:
         assert conn.execute("SELECT count(*) FROM transactions").fetchone()[0] == 0
     assert list(app.dataframe[0].value["Status"])[0].startswith("Undone")

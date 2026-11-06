@@ -41,31 +41,38 @@ def test_fingerprint_is_unique(conn, add_card_txn):
 
 def test_on_conflict_do_nothing_skips_duplicates(conn, basics):
     sql = (
-        "INSERT INTO transactions (source, card_id, import_batch_id, txn_date, amount_cents, "
-        "raw_description, purchaser_id, fingerprint) VALUES ('card', %s, %s, '2026-01-01', 500, "
-        "'FAKE COFFEE', %s, 'dup-fp') ON CONFLICT (fingerprint) DO NOTHING"
+        "INSERT INTO transactions (source, account_id, import_batch_id, txn_date, amount_cents, "
+        "raw_description, purchaser_id, fingerprint, kind, kind_source) VALUES ('import', %s, %s, '2026-01-01', 500, "
+        "'FAKE COFFEE', %s, 'dup-fp', 'expense', 'parser') ON CONFLICT (fingerprint) DO NOTHING"
     )
     args = (basics["card"], basics["batch"], basics["person"])
     assert conn.execute(sql, args).rowcount == 1
     assert conn.execute(sql, args).rowcount == 0
 
 
-# ---- card vs manual ------------------------------------------------------
+# ---- imported vs manual -----------------------------------------------------
 
-def test_manual_entry_without_card_fields(conn, basics):
+def test_manual_entry_needs_an_account_but_no_import_fields(conn, basics):
     conn.execute(
+        "INSERT INTO transactions (source, account_id, txn_date, amount_cents, raw_description, purchaser_id) "
+        "VALUES ('manual', %s, '2026-01-10', 2000, 'Cash: farmers market', %s)",
+        (basics["checking"], basics["person"]),
+    )
+    expect_error(
+        conn,
         "INSERT INTO transactions (source, txn_date, amount_cents, raw_description, purchaser_id) "
-        "VALUES ('manual', '2026-01-10', 2000, 'Cash: farmers market', %s)",
+        "VALUES ('manual', '2026-01-10', 2000, 'no account', %s)",
         (basics["person"],),
+        errors.NotNullViolation,
     )
 
 
-def test_manual_entry_cannot_have_card(conn, basics):
+def test_manual_entry_cannot_have_import_fields(conn, basics):
     expect_error(
         conn,
-        "INSERT INTO transactions (source, card_id, txn_date, amount_cents, raw_description, purchaser_id) "
-        "VALUES ('manual', %s, '2026-01-10', 2000, 'x', %s)",
-        (basics["card"], basics["person"]),
+        "INSERT INTO transactions (source, account_id, import_batch_id, txn_date, amount_cents, raw_description, purchaser_id) "
+        "VALUES ('manual', %s, %s, '2026-01-10', 2000, 'x', %s)",
+        (basics["card"], basics["batch"], basics["person"]),
         errors.CheckViolation,
     )
 

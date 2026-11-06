@@ -7,7 +7,7 @@ from budget.rules import (
 
 
 def rule(**kw):
-    base = dict(id=1, priority=100, match_type="contains", pattern="coffee", card_id=None,
+    base = dict(id=1, priority=100, match_type="contains", pattern="coffee", account_id=None,
                 min_amount_cents=None, max_amount_cents=None, category_id=1, merchant_name=None)
     return Rule(**(base | kw))
 
@@ -30,8 +30,8 @@ def test_regex():
     assert not r.matches("SEASHELL SHOP", None, 1)
 
 
-def test_card_and_amount_filters():
-    r = rule(card_id=7, min_amount_cents=1000, max_amount_cents=5000)
+def test_account_and_amount_filters():
+    r = rule(account_id=7, min_amount_cents=1000, max_amount_cents=5000)
     assert r.matches("coffee", 7, 1000)
     assert r.matches("coffee", 7, 5000)
     assert not r.matches("coffee", 8, 2000)
@@ -141,3 +141,48 @@ def test_manual_can_replace_rule_category(conn, add_card_txn, basics):
     apply_rules(conn)
     categorize_manually(conn, tid, basics["sub2"])
     assert conn.execute("SELECT category_id, category_source, rule_id FROM transactions WHERE id = %s", (tid,)).fetchone() == (basics["sub2"], "manual", None)
+
+
+# ---- kinds (v2) ----------------------------------------------------------------
+
+def test_rules_never_touch_transfers(conn, add_card_txn, basics):
+    tid = add_card_txn(raw_description="AUTOPAY CAFE", kind="transfer", kind_source="parser")
+    create_rule(conn, "cafe", basics["sub"])
+    assert apply_rules(conn).categorized == 0
+    assert conn.execute("SELECT kind, category_id FROM transactions WHERE id = %s", (tid,)).fetchone() == ("transfer", None)
+
+
+def test_income_rule_sets_kind(conn, add_card_txn, basics):
+    tid = add_card_txn(raw_description="PAYROLL ACME", amount_cents=-500000, kind=None, kind_source=None,
+                       account_id=basics["checking"])
+    rule_id = create_rule(conn, "payroll", basics["income"])
+    assert apply_rules(conn).categorized == 1
+    assert conn.execute("SELECT kind, kind_source, category_id, rule_id FROM transactions WHERE id = %s",
+                        (tid,)).fetchone() == ("income", "rule", basics["income"], rule_id)
+
+    # The rule goes away: the row goes back to Review, and the kind it only had from the rule is cleared.
+    conn.execute("UPDATE rules SET active = false WHERE id = %s", (rule_id,))
+    assert apply_rules(conn).uncategorized == 1
+    assert conn.execute("SELECT kind, kind_source, category_id FROM transactions WHERE id = %s",
+                        (tid,)).fetchone() == (None, None, None)
+
+
+def test_parser_kind_kept_when_rule_agrees(conn, add_card_txn, basics):
+    tid = add_card_txn(raw_description="FAKE CAFE")
+    create_rule(conn, "cafe", basics["sub"])
+    apply_rules(conn)
+    assert conn.execute("SELECT kind, kind_source FROM transactions WHERE id = %s", (tid,)).fetchone() == ("expense", "parser")
+
+
+def test_rule_cannot_change_a_manual_kind(conn, add_card_txn, basics):
+    tid = add_card_txn(raw_description="REIMBURSEMENT", kind="expense", kind_source="manual")
+    create_rule(conn, "reimbursement", basics["income"])
+    assert apply_rules(conn).categorized == 0
+    assert conn.execute("SELECT kind, category_id FROM transactions WHERE id = %s", (tid,)).fetchone() == ("expense", None)
+
+
+def test_categorize_manually_with_income_category_sets_kind(conn, add_card_txn, basics):
+    tid = add_card_txn(raw_description="INTEREST PAID", amount_cents=-150, kind=None, kind_source=None,
+                       account_id=basics["checking"])
+    categorize_manually(conn, tid, basics["income"])
+    assert conn.execute("SELECT kind, kind_source FROM transactions WHERE id = %s", (tid,)).fetchone() == ("income", "manual")
