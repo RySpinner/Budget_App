@@ -102,7 +102,7 @@ python -m budget.import_csv --batches                  # past imports
 python -m budget.import_csv --undo 7                   # undo batch 7
 ```
 
-Each account's `parser_key` picks its parser: `citi`, `chase` or `credit_union` (a credit union Visa export) so far (bank parsers come in phase 9). When the Import page can tell from a file's format which single account it belongs to, it picks the account automatically. Card payments are kept as **transfers** (money moving between your own accounts), never counted as spending. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
+Each account's `parser_key` picks its parser: `citi`, `chase`, `credit_union` (a credit union Visa export) or `amex` so far (bank parsers come in phase 9). When the Import page can tell from a file's format which single account it belongs to, it picks the account automatically. Card payments are kept as **transfers** (money moving between your own accounts), never counted as spending. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
 
 ## Tests
 
@@ -134,7 +134,7 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 ```
 app/           Streamlit app (streamlit_app.py, views/ = one file per page, charts.py, ui.py, auth_gate.py)
 budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions, budgets, reports
-budget/parsers one module per institution (citi.py, chase.py, credit_union.py), sharing base.ParsedRow
+budget/parsers one module per institution (citi.py, chase.py, credit_union.py, amex.py), sharing base.ParsedRow
 migrations/    versioned schema changes
 seed/          categories.toml (tracked), local.toml (untracked: people and accounts)
 config/        secrets.toml (untracked)

@@ -150,6 +150,13 @@ changes a requirement). Newest items go at the end of each section.
 74. **The Account ID column isn't used to pick the account.** The format alone tells the credit union apart from Citi and Chase. Matching on Account ID would separate two accounts at the same credit union; worth doing in phase 9 if checking uses the same export.
 75. **Merchant cleanup strips a trailing "REF #nnnn"** (for every institution); raw_description keeps it.
 
+### Amex parser (2026-11-06)
+76. **Amex benefit statement credits count as refunds** (negative spending), e.g. "$120 Disney Streaming Credit" -$10 offsets the Hulu charge. The alternative is to treat them like rewards; that touches the OPEN rewards question, so please confirm.
+77. **Membership Rewards credits are excluded,** like the other cards' rewards, until the rewards question is settled.
+78. **Payments are found by description** ("... PAYMENT - THANK YOU"); there is no Type column.
+79. **Only the full 11-column Amex export is accepted** (the one with Extended Details). If Amex offers a shorter download (just Date, Description, Amount), it would need adding.
+80. **Merchant cleanup drops a padded store number glued to the city** ("000000CHICAGO" becomes "CHICAGO"). "HLU*HULUPLUS HULU.COM/BILL" is left as it is; a rule can set a nicer merchant name.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 

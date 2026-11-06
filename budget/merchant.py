@@ -8,6 +8,7 @@ doesn't need to be perfect: rules can set an exact merchant_name later
     "SQ *BLUE BOTTLE COFFEE"                        -> "BLUE BOTTLE COFFEE"
     "TST* PIZZA PLACE #0123 SPRINGFIELD IL"         -> "PIZZA PLACE SPRINGFIELD"
     "FAKE CAFE SPRINGFIELD IL REF #900000000000002" -> "FAKE CAFE SPRINGFIELD"
+    "FAKE GROCER #123 000000SPRINGFIELD      IL"    -> "FAKE GROCER SPRINGFIELD"
 """
 
 import re
@@ -38,7 +39,8 @@ def clean_merchant(raw_description: str) -> str:
     text = " ".join(raw_description.split())          # collapse whitespace
     text = REFERENCE_SUFFIX.sub("", text)
     text = PROCESSOR_PREFIX.sub("", text)
-    tokens = text.split(" ")
+    # A padded store number glued to the city (Amex), e.g. "000000CHICAGO" -> "CHICAGO".
+    tokens = [re.sub(r"^\d{4,}(?=[A-Za-z])", "", t) for t in text.split(" ")]
 
     # Strip noise from the end, e.g. "... 8603889001 CT null XXXX7720".
     while len(tokens) > 1 and _is_noise(tokens[-1]):

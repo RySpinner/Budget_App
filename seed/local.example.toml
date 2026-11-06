@@ -17,7 +17,7 @@ name = "Partner B"
 #               retirement / loan are reserved for later)
 #   owner:      a person above, or "Joint" for joint accounts
 #   parser_key: which parser reads this account's CSV export.
-#               Available: "citi", "chase", "credit_union". Bank parsers come in phase 9.
+#               Available: "citi", "chase", "credit_union", "amex". Bank parsers come in phase 9.
 #               Leave it out for an account you only enter by hand.
 [[account]]
 display_name = "Partner A - Citi card"
