@@ -116,6 +116,21 @@ changes a requirement). Newest items go at the end of each section.
 50. **Chase's own Category column is kept in `raw_row` but not used.** It could later pre-fill category suggestions in Review.
 51. **A comma in a Chase description is re-joined,** on the assumption that the last four columns (Category, Type, Amount, Memo) never contain commas.
 
+### v2 SPEC: accounts and double-entry lite (written 2026-11-06, not yet built)
+52. **"Double-entry lite":**
+    - Every transaction sits in one account, and its other side is either a category or another household account (a transfer).
+    - A transfer has two linked legs that must sum to zero.
+    - Balances are reconciled against bank-reported snapshots.
+    - No journals, and no debits/credits in the UI.
+53. **The v1 sign convention is kept for all accounts:** positive = against the household (money out of an asset, or more owed on a card). Existing rows need no sign migration.
+54. **Card payments are stored from v2 on,** as the card's leg of a transfer, instead of being excluded (this changes #9 for payments). Re-importing old card files backfills them. Pending rows stay excluded.
+55. **A built-in "Cash" account** holds hand-entered cash spending. Existing manual entries move into it.
+56. **Unambiguous transfers are linked automatically** (one candidate on each side, opposite amount, different accounts, within 5 days). Everything else goes to Review. Money sent to people/places we don't track is expense or income, not a transfer.
+57. **A new transaction `kind`:** expense, income or transfer, with a refund being a negative expense. It has its own `kind_source`, and manual choices are protected like categories. Parsers may set it when the bank says what a row is (e.g. Chase's Type column).
+58. **Income categories** live in the same table, marked `kind = income`, starting with Income › Paycheck, Interest, Refunds & reimbursements, General. Budgets apply only to expense categories.
+59. **Accounts have a class** (asset or liability) **and a type** (checking, savings, cash, credit_card; reserved: brokerage, retirement, loan). Investment accounts will be value-only, through balance snapshots.
+60. **v2 phase order:** 8 accounts foundation → 9 bank parsers → 10 transfer matching → 11 reports and Accounts page → 12 PINNED special types; the IOU ledger becomes phase 13.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 
@@ -133,6 +148,11 @@ changes a requirement). Newest items go at the end of each section.
 - **[2026-11-01] Seed warns** when `local.toml` disagrees with an existing card.
 - **[2026-11-01] Citi's real CSV format** (as downloaded, viewed in Notepad): descriptions are quoted, amounts are not. A credit looks like ` -$ 1,878.69`, and its thousands comma splits it across two columns. Handle it in the parser (#39) rather than asking the owner to clean files.
 - **[2026-11-01] Files opened and saved in Excel change format:** amounts become `($1,587.82)`-style (also split), quotes are dropped, the header gains a trailing comma, and dates lose leading zeros. The parser accepts both, and both give the same fingerprints. Still, import the original download, not an Excel-saved copy.
+- **[2026-11-06] Scope extends to checking and savings accounts** (v2), with income, transfers, balances and net worth. SPEC.md rewritten; built before the IOU ledger.
+- **[2026-11-06] A "Joint" person** owns joint accounts and is the purchaser of joint purchases.
+- **[2026-11-06] Bookkeeping style:** thorough, "double-entry" style, but not overwhelming for household use (interpreted as #52).
+- **[2026-11-06] "Accounts" are generic, with subtypes,** so investment accounts can be added later. Bank accounts are the focus now.
+- **[2026-11-06] Venmo/Zelle, ATM withdrawals and paper checks are in scope but PINNED:** designed separately (SPEC §5a and phase 12), with extra review.
 - **[2026-11-01] Chase CSV format** (real download): `Transaction Date,Post Date,Description,Category,Type,Amount,Memo`. Unix line endings, no quotes, no `$` or thousands commas; charges are negative (e.g. `-8.88`) with Type `Sale`.
 - **[2026-11-01] Chase autopay rows** look like `AUTOMATIC PAYMENT - THANK`, with Type `Payment`, a positive amount and an empty Chase category. They're excluded as card payments (confirmed with a real row).
 - **[2026-11-01] Pi:** Raspberry Pi 5 running Raspberry Pi OS 64-bit.

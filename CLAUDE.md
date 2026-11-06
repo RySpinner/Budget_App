@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-Household spending tracker: Python + Streamlit app with a PostgreSQL backend on a Raspberry Pi.
+Household finances tracker: Python + Streamlit app with a PostgreSQL backend on a Raspberry Pi.
+v1 (credit-card spending) is built; v2 (bank accounts, transfers, balances: "double-entry lite") is specced in SPEC.md, phases 8–12.
 
 ## Before making changes
 - Read `SPEC.md`. It is the source of truth for requirements and design decisions.
@@ -14,7 +15,8 @@ Household spending tracker: Python + Streamlit app with a PostgreSQL backend on 
 ## Non-negotiables
 - Money is stored as integer cents. Never use floats for amounts.
 - Running totals and budget-to-date are computed, never stored.
-- Rules must never overwrite a category where `category_source = 'manual'`.
+- Rules must never overwrite a category where `category_source = 'manual'` (from v2, the same applies to `kind_source` and transfer links).
+- Transfers never count as spending or income: the two legs of a transfer sum to zero and stay out of spending reports.
 - Keep raw bank data (`raw_description`, `raw_row`, archived CSVs).
 - Schema changes go through versioned migrations.
 - Never commit credentials, real CSV exports, or database dumps. Test fixtures use fake amounts and merchants.

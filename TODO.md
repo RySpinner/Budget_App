@@ -8,6 +8,9 @@ decisions to reassess are in DECISIONS.md.
   - check refunds come through as negative spending (DECISIONS.md #12);
   - decide how a fee/interest *reversal* is treated. A refund (negative spending) seems likely, since fees count as spending.
   - Also worth a look if any show up in a year of data: "PAYMENT THANK YOU"-style online payments, and rewards/cash-back credits.
+- [ ] **Review the v2 SPEC** (SPEC.md, rewritten 2026-11-06) and DECISIONS.md #52–60 before phase 8 starts.
+- [ ] **Bank samples** for each checking/savings institution: header row plus a debit purchase, a deposit/paycheck, a transfer to savings, a card payment, an ATM withdrawal, and the balance column if there is one (fake amounts are fine; copy from Notepad, not Excel).
+- [ ] **Decide:** rewards / cash-back credits as income or as negative expense; the transfer matching window (default 5 days); how much cash tracking is wanted; the income categories.
 - [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase.
 - [ ] **Chase:** Payment confirmed. When they turn up, send a real **Return**, **Fee** and **Adjustment** row (fake amounts are fine) to confirm DECISIONS.md #48.
 - [ ] *Idea:* use Chase's own Category column to pre-fill suggestions on the Review page (DECISIONS.md #50).
@@ -28,8 +31,15 @@ decisions to reassess are in DECISIONS.md.
 - [x] Phase 5: Transactions page (filters, editing, splits, manual entry)
 - [x] Phase 6: budgets and Dashboard
 - [x] Phase 7: deployment on the Pi (service, password, backups). Code and guide done; the owner still does the Pi setup.
-- [ ] Phase 8: IOU ledger; optional history import
-- [ ] Settings page for categories, cards and people. No phase assigned yet; could come with or after Phase 6.
+- [ ] Phase 8: accounts foundation (cards → accounts, Joint, Cash account, kind, transfers, balance snapshots, card payments stored)
+- [ ] Phase 9: first bank parser(s), with balance snapshots and kind/transfer rules
+- [ ] Phase 10: transfer matching and Review tabs (unmatched transfers, needs care)
+- [ ] Phase 11: cash flow, balances, net worth, reconciliation; Accounts page
+- [ ] Phase 12: PINNED special types: ATM/cash, Venmo/Zelle, checks
+- [ ] Phase 13: IOU ledger; optional history import
+- [ ] Phase 14 (future): investment accounts
+- [ ] Settings page for categories and people (accounts get their own page in phase 11).
+- [ ] Pi firewall (`ufw`) step in docs/deploy.md (SPEC §9, recommended for v2).
 
 ## Small things noticed
 - [ ] Category names mix "Fees & Interest" (title case) with "Tolls & parking" (sentence case). Cosmetic; tidy up when the taxonomy is final.
