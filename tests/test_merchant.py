@@ -13,3 +13,8 @@ from budget.merchant import clean_merchant
 ])
 def test_clean_merchant(raw, expected):
     assert clean_merchant(raw) == expected
+
+
+def test_reference_number_suffix_removed():
+    assert clean_merchant("FAKE CAFE SPRINGFIELD IL REF #900000000000002") == "FAKE CAFE SPRINGFIELD"
+    assert clean_merchant("Amazon.com*ASDF     Amzn.com/billWA REF #22222222222222222") == "Amazon.com*ASDF Amzn.com/billWA"

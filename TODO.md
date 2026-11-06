@@ -12,8 +12,9 @@ decisions to reassess are in DECISIONS.md.
 - [ ] **On your laptop after pulling phase 8:** run `python -m budget.migrate`, then re-import your card CSVs to fill in the card payments (old rows show up as duplicates).
 - [ ] **Bank samples** for each checking/savings institution: header row plus a debit purchase, a deposit/paycheck, a transfer to savings, a card payment, an ATM withdrawal, and the balance column if there is one (fake amounts are fine; copy from Notepad, not Excel).
 - [ ] **Decide:** rewards / cash-back credits as income or as negative expense; the transfer matching window (default 5 days); how much cash tracking is wanted; the income categories.
-- [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase.
+- [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase, credit union card.
 - [ ] **Chase:** Payment confirmed. When they turn up, send a real **Return**, **Fee** and **Adjustment** row (fake amounts are fine) to confirm DECISIONS.md #48.
+- [ ] **Credit union card:** payment and purchase confirmed. When they turn up, send a real **refund**, **rewards redemption**, **interest/fee** row, and say whether **pending** charges appear in the export (DECISIONS.md #69–75). If your credit union checking/savings export has the same columns, say so: phase 9 can reuse this parser.
 - [ ] *Idea:* use Chase's own Category column to pre-fill suggestions on the Review page (DECISIONS.md #50).
 - [ ] **Category taxonomy:** confirm with your partner (SPEC §4, OPEN).
 - [ ] **Budget amounts**, especially Dining & Going Out (SPEC §4, OPEN). Enter them on the Budgets page.

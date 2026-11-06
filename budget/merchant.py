@@ -7,11 +7,15 @@ doesn't need to be perfect: rules can set an exact merchant_name later
     "FCP EURO 8603889001 CT null XXXXXXXXXXXX7720"  -> "FCP EURO"
     "SQ *BLUE BOTTLE COFFEE"                        -> "BLUE BOTTLE COFFEE"
     "TST* PIZZA PLACE #0123 SPRINGFIELD IL"         -> "PIZZA PLACE SPRINGFIELD"
+    "FAKE CAFE SPRINGFIELD IL REF #900000000000002" -> "FAKE CAFE SPRINGFIELD"
 """
 
 import re
 
 # Payment-processor prefixes such as "SQ *", "TST*", "PAYPAL *".
+# A trailing reference number, e.g. " REF #22222222222222222" (credit union).
+REFERENCE_SUFFIX = re.compile(r"\s+REF\s*#?\s*\d+\s*$", re.I)
+
 PROCESSOR_PREFIX = re.compile(r"^(SQ|TST|SP|PAYPAL|PP|PY|DD|IC|GOOGLE|AMZN MKTP|AMZ)\s*\*\s*", re.I)
 
 US_STATES = set(
@@ -32,6 +36,7 @@ def _is_noise(token: str) -> bool:
 
 def clean_merchant(raw_description: str) -> str:
     text = " ".join(raw_description.split())          # collapse whitespace
+    text = REFERENCE_SUFFIX.sub("", text)
     text = PROCESSOR_PREFIX.sub("", text)
     tokens = text.split(" ")
 

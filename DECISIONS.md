@@ -141,6 +141,15 @@ changes a requirement). Newest items go at the end of each section.
 67. **The Transactions page shows spending by default,** with a Kind filter for income, transfers, unknown or everything. Running totals add up whatever is shown.
 68. **`local.toml` uses `[[account]]` entries** (display_name, institution, type, last4, owner, optional parser_key). Old `[[card]]` entries still work as credit cards.
 
+### Credit union card parser (2026-11-06)
+69. **Parser key `credit_union`** (the export didn't name the institution). If a second credit union with a different format turns up, this one gets renamed.
+70. **Payments are found by description** ("PAYMENT - THANK YOU"), since there is no Type column. The Transaction ID ends in ":PAYMENT" for the payment, but for purchases it ends in the first 8 letters of the merchant, so it isn't a reliable type.
+71. **Any other positive amount is a refund** (a negative expense). Rewards wording (REDEMPTION, CASH BACK) is excluded like the other cards. Unconfirmed until a real refund and rewards row turn up.
+72. **Dedup uses our usual fingerprint, not the credit union's Transaction ID.** The Transaction ID looks unique per row and could be a better key, but every other parser uses the same fingerprint. The ID is kept in raw_row, so this can change later.
+73. **Pending rows:** no Status column, so we don't know whether pending charges appear in the export. If they do and later change, they could import twice.
+74. **The Account ID column isn't used to pick the account.** The format alone tells the credit union apart from Citi and Chase. Matching on Account ID would separate two accounts at the same credit union; worth doing in phase 9 if checking uses the same export.
+75. **Merchant cleanup strips a trailing "REF #nnnn"** (for every institution); raw_description keeps it.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 
