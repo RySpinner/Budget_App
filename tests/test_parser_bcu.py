@@ -3,19 +3,19 @@ from pathlib import Path
 
 import pytest
 
-from budget.parsers import credit_union, get_parser
+from budget.parsers import bcu, get_parser
 
 FIXTURES = Path(__file__).parent / "fixtures"
-FIXTURE = FIXTURES / "credit_union" / "sample.csv"
+FIXTURE = FIXTURES / "bcu" / "sample.csv"
 
 
 @pytest.fixture
 def rows():
-    return credit_union.parse(FIXTURE.read_text())
+    return bcu.parse(FIXTURE.read_text())
 
 
 def test_registered():
-    assert get_parser("credit_union") is credit_union.parse
+    assert get_parser("bcu") is bcu.parse
 
 
 def test_payment_is_transfer_with_thousands_comma(rows):
@@ -62,8 +62,8 @@ def test_blank_rows_skipped(rows):
 def test_other_formats_rejected_both_ways():
     from budget.parsers import chase, citi
     for other in ("citi", "chase"):
-        with pytest.raises(ValueError, match="credit union"):
-            credit_union.parse((FIXTURES / other / "sample.csv").read_text())
+        with pytest.raises(ValueError, match="BCU"):
+            bcu.parse((FIXTURES / other / "sample.csv").read_text())
     with pytest.raises(ValueError, match="Citi"):
         citi.parse(FIXTURE.read_text())
     with pytest.raises(ValueError, match="Chase"):
@@ -73,4 +73,4 @@ def test_other_formats_rejected_both_ways():
 def test_bad_row_reports_line_number():
     header = FIXTURE.read_text().splitlines()[0]
     with pytest.raises(ValueError, match="Line 2"):
-        credit_union.parse(header + '\nA,B,13/45/26,,X,,,,"-$1.00",\n')
+        bcu.parse(header + '\nA,B,13/45/26,,X,,,,"-$1.00",\n')

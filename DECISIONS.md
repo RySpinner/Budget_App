@@ -142,7 +142,7 @@ changes a requirement). Newest items go at the end of each section.
 68. **`local.toml` uses `[[account]]` entries** (display_name, institution, type, last4, owner, optional parser_key). Old `[[card]]` entries still work as credit cards.
 
 ### Credit union card parser (2026-11-06)
-69. **Parser key `credit_union`** (the export didn't name the institution). If a second credit union with a different format turns up, this one gets renamed.
+69. **Parser key `bcu`** (renamed from `credit_union` at the owner's request, 2026-11-06).
 70. **Payments are found by description** ("PAYMENT - THANK YOU"), since there is no Type column. The Transaction ID ends in ":PAYMENT" for the payment, but for purchases it ends in the first 8 letters of the merchant, so it isn't a reliable type.
 71. **Any other positive amount is a refund** (a negative expense). Rewards wording (REDEMPTION, CASH BACK) is excluded like the other cards. Unconfirmed until a real refund and rewards row turn up.
 72. **Dedup uses our usual fingerprint, not the credit union's Transaction ID.** The Transaction ID looks unique per row and could be a better key, but every other parser uses the same fingerprint. The ID is kept in raw_row, so this can change later.

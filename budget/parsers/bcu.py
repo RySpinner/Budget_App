@@ -1,4 +1,4 @@
-"""Parser for the credit union's credit card CSV export.
+"""Parser for BCU (credit union) credit card CSV exports. Parser key: "bcu".
 
 Format (seen in a real export, as downloaded):
     Account ID,Transaction ID,Date,Name,Description,Check Number,Category,Tags,Amount,Balance
@@ -53,7 +53,7 @@ def parse(text: str) -> list[ParsedRow]:
         header.pop()
     if header != EXPECTED_COLUMNS:
         raise ValueError(
-            f"This doesn't look like a credit union export. Expected columns {EXPECTED_COLUMNS}, got {header}"
+            f"This doesn't look like a BCU export. Expected columns {EXPECTED_COLUMNS}, got {header}"
         )
 
     rows = []

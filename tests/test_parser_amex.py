@@ -64,7 +64,7 @@ def test_windows_line_endings():
 
 def test_other_formats_rejected_both_ways():
     from budget.parsers import PARSERS
-    for key in ("citi", "chase", "credit_union"):
+    for key in ("citi", "chase", "bcu"):
         with pytest.raises(ValueError, match="Amex"):
             amex.parse((FIXTURES / key / "sample.csv").read_text())
         with pytest.raises(ValueError):

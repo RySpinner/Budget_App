@@ -186,7 +186,7 @@ Plus an optional `merchant_name` (cleaned name to apply).
 
 Parsers live in one module per institution with a common interface, plus a test for each using a sample CSV (with fake amounts and merchants).
 
-Institutions so far: Citi (card), Chase (card), a credit union (card; parser key `credit_union`), Amex (card). Bank (checking/savings) institutions: **OPEN**. Need a header row and sample rows for each, including a debit purchase, a deposit/paycheck, a transfer, a card payment, and the balance column if any.
+Institutions so far: Citi (card), Chase (card), BCU, a credit union (card; parser key `bcu`), Amex (card). Bank (checking/savings) institutions: **OPEN**. Need a header row and sample rows for each, including a debit purchase, a deposit/paycheck, a transfer, a card payment, and the balance column if any.
 
 ### 5a. PINNED: special transaction types
 These are in scope, but each gets its own design pass and a dedicated review flow, because getting them wrong distorts totals. Until designed, they land in Review with a "needs care" flag and are never auto-categorized.
