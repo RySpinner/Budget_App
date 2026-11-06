@@ -15,7 +15,7 @@ decisions to reassess are in DECISIONS.md.
 - [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase, credit union card, Amex.
 - [ ] **Chase:** Payment confirmed. When they turn up, send a real **Return**, **Fee** and **Adjustment** row (fake amounts are fine) to confirm DECISIONS.md #48.
 - [ ] **Credit union card:** payment and purchase confirmed. When they turn up, send a real **refund**, **rewards redemption**, **interest/fee** row, and say whether **pending** charges appear in the export (DECISIONS.md #69–75). If your credit union checking/savings export has the same columns, say so: phase 9 can reuse this parser.
-- [ ] **Amex:** payment, purchase and a streaming statement credit confirmed. Decide whether benefit credits are refunds (current) or rewards (DECISIONS.md #76). When they turn up, send a real **return**, **Membership Rewards** and **interest/fee** row.
+- [ ] **Amex:** payment, purchase and a streaming statement credit confirmed. Benefit credits are refunds (decided). When they turn up, send a real **return**, **Membership Rewards** and **interest/fee** row.
 - [ ] *Idea:* use Chase's own Category column to pre-fill suggestions on the Review page (DECISIONS.md #50).
 - [ ] **Category taxonomy:** confirm with your partner (SPEC §4, OPEN).
 - [ ] **Budget amounts**, especially Dining & Going Out (SPEC §4, OPEN). Enter them on the Budgets page.

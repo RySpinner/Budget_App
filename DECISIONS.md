@@ -151,7 +151,7 @@ changes a requirement). Newest items go at the end of each section.
 75. **Merchant cleanup strips a trailing "REF #nnnn"** (for every institution); raw_description keeps it.
 
 ### Amex parser (2026-11-06)
-76. **Amex benefit statement credits count as refunds** (negative spending), e.g. "$120 Disney Streaming Credit" -$10 offsets the Hulu charge. The alternative is to treat them like rewards; that touches the OPEN rewards question, so please confirm.
+76. ~~Amex benefit statement credits count as refunds~~ Confirmed by the owner 2026-11-06 (see Decided).
 77. **Membership Rewards credits are excluded,** like the other cards' rewards, until the rewards question is settled.
 78. **Payments are found by description** ("... PAYMENT - THANK YOU"); there is no Type column.
 79. **Only the full 11-column Amex export is accepted** (the one with Extended Details). If Amex offers a shorter download (just Date, Description, Amount), it would need adding.
@@ -186,3 +186,4 @@ changes a requirement). Newest items go at the end of each section.
 - **[2026-11-01] Access away from home: not sure yet.** Home network only for now; Tailscale steps are written up as optional (docs/deploy.md §12).
 - **[2026-11-01] Login is remembered for 30 days** per browser.
 - **[2026-11-01] Citi autopay rows** look like `AUTOPAY <digits>RAUTOPAY AUTO-PMT`, with the amount in Credit as a negative. They're excluded as card payments.
+- **[2026-11-06] Card benefit statement credits are refunds** (negative spending), e.g. Amex's "$120 Disney Streaming Credit" -$10 offsets the Hulu charge. This does not settle the separate rewards / cash-back question (still OPEN).

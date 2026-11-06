@@ -21,8 +21,8 @@ Format (seen in a real export, as downloaded):
     everything else                       -> expense; a negative amount is a
                                              refund, which includes Amex's
                                              benefit statement credits such as
-                                             "$120 Disney Streaming Credit" (see
-                                             DECISIONS.md)
+                                             "$120 Disney Streaming Credit" (owner
+                                             decision, 2026-11-06)
 - Amex's own Category column is kept in raw_row but not used to categorize.
 """
 
