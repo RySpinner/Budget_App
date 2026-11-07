@@ -53,4 +53,28 @@ def test_rules_page_shows_rule_and_usage(db, monkeypatch):
 def test_rerun_button(db, monkeypatch):
     app = run("rules_page.py", db, monkeypatch)
     next(b for b in app.button if b.label == "Re-run all rules").click().run()
-    assert "Rules re-run: 0 newly categorized" in app.success[0].value
+    assert "Rules re-run: 0 newly sorted" in app.success[0].value
+
+
+def test_add_transfer_rule_from_form(db, monkeypatch):
+    app = run("rules_page.py", db, monkeypatch)
+    next(t for t in app.text_input if t.label == "Pattern").input("FAKE SAVINGS XFER")
+    next(s for s in app.selectbox if s.label == "Sets").select("↔ Transfer between our accounts")
+    next(s for s in app.selectbox if s.label == "Only in account").select("Citi")
+    next(b for b in app.button if b.label == "Add rule and run it").click().run()
+    assert not app.exception
+    assert "Rule added" in app.success[0].value
+    with psycopg.connect(db) as conn:
+        assert conn.execute("SELECT is_transfer, category_id FROM rules WHERE pattern = 'FAKE SAVINGS XFER'"
+                            ).fetchone() == (True, None)
+    labels = [b.label for b in app.button]
+    assert "Save changes and re-run rules" in labels
+
+
+def test_other_account_only_for_transfer_rules(db, monkeypatch):
+    app = run("rules_page.py", db, monkeypatch)
+    next(t for t in app.text_input if t.label == "Pattern").input("FAKE THING")
+    next(s for s in app.selectbox if s.label == "Sets").select_index(0)          # a category
+    next(s for s in app.selectbox if s.label == "Other account (transfers only)").select("Citi")
+    next(b for b in app.button if b.label == "Add rule and run it").click().run()
+    assert "only for transfer rules" in app.error[0].value

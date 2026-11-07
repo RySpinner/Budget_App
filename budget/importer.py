@@ -32,12 +32,12 @@ class NewRow:
     parsed: ParsedRow
     fingerprint: str
     merchant: str
-    rule: Rule | None = None   # the categorization rule that matched, if any
+    rule: Rule | None = None   # the rule that matched, if any (a category rule or a transfer rule)
 
     @property
     def kind(self) -> str | None:
-        """What the row will be stored as: the matching rule's category kind, else the parser's kind."""
-        return self.rule.category_kind if self.rule else self.parsed.kind
+        """What the row will be stored as: the matching rule's kind, else the parser's kind."""
+        return self.rule.kind if self.rule else self.parsed.kind
 
     @property
     def kind_source(self) -> str | None:
@@ -64,6 +64,7 @@ class ImportPreview:
     @property
     def uncategorized_count(self) -> int:
         """New rows that will need a category in Review (transfers don't have one)."""
+        # A transfer rule leaves category_id None but kind "transfer", so it isn't counted.
         return sum(1 for n in self.new_rows if n.rule is None and n.kind != "transfer")
 
     @property
@@ -176,7 +177,8 @@ def preview_import(conn: psycopg.Connection, account_id: int, filename: str, dat
     rules = load_rules(conn)
     candidates = []
     for row, fp in fingerprint_rows(account_id, kept):
-        rule = first_match(rules, row.raw_description, account_id, row.amount_cents, row.kind)
+        rule = first_match(rules, row.raw_description, account_id, row.amount_cents,
+                           row.kind, "parser" if row.kind else None)
         merchant = rule.merchant_name if rule and rule.merchant_name else clean_merchant(row.raw_description)
         candidates.append(NewRow(parsed=row, fingerprint=fp, merchant=merchant, rule=rule))
     existing = {
@@ -244,7 +246,7 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
                 (preview.account_id, row.txn_date, row.posted_date, row.amount_cents, row.raw_description,
                  new.merchant, new.kind, new.kind_source,
                  new.rule.category_id if new.rule else None,
-                 "rule" if new.rule else None,
+                 "rule" if new.rule and new.rule.category_id is not None else None,
                  new.rule.id if new.rule else None,
                  preview.purchaser_id, new.fingerprint, batch_id, json.dumps(row.raw_row)),
             )

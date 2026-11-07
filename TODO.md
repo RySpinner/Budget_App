@@ -11,6 +11,8 @@ decisions to reassess are in DECISIONS.md.
 - [ ] **Review DECISIONS.md #52–68** (v2 SPEC interpretations and phase 8 as built).
 - [ ] **On your laptop after pulling phase 8:** run `python -m budget.migrate`, then re-import your card CSVs to fill in the card payments (old rows show up as duplicates).
 - [ ] **More BCU checking rows** (fake amounts are fine): a debit card purchase, a transfer to/from savings, an ATM withdrawal, a check, a Venmo/Zelle row, a fee and a pending row if the export shows them. Right now only the paycheck and the card payment are confirmed. Also: is savings at BCU too (same export)?
+- [ ] **After pulling phase 9:** run `python -m budget.migrate` (0005 and 0006). Then, in Review, try marking a BCU checking row as a transfer with *Save as rule* and an *Other account*.
+- [ ] **Review DECISIONS.md #81–95** (phase 9).
 - [ ] **Decide:** should bank amounts show money in as positive on screen (DECISIONS.md #87)?
 - [ ] **Bank samples** for each checking/savings institution: header row plus a debit purchase, a deposit/paycheck, a transfer to savings, a card payment, an ATM withdrawal, and the balance column if there is one (fake amounts are fine; copy from Notepad, not Excel).
 - [ ] **Decide:** rewards / cash-back credits as income or as negative expense; the transfer matching window (default 5 days); how much cash tracking is wanted; the income categories.
@@ -37,9 +39,9 @@ decisions to reassess are in DECISIONS.md.
 - [x] Phase 6: budgets and Dashboard
 - [x] Phase 7: deployment on the Pi (service, password, backups). Code and guide done; the owner still does the Pi setup.
 - [x] Phase 8: accounts foundation (cards → accounts, Joint, Cash account, kind, transfers, balance snapshots, card payments stored)
-- [ ] Phase 9: first bank parser(s), with balance snapshots and kind/transfer rules
+- [x] Phase 9: first bank parser(s), with balance snapshots and kind/transfer rules
   - [x] Part 1: BCU checking parser, balance snapshots (undone with their import), card/checking kinds
-  - [ ] Part 2: rules that set kind and transfer counterpart (`rules.counterpart_account_id`); saving a rule for a transfer from Review
+  - [x] Part 2: transfer rules with an optional counterpart account (migration 0006); saving a transfer rule from Review; Rules page "Sets" / "Other account"
 - [ ] Phase 10: transfer matching and Review tabs (unmatched transfers, needs care)
 - [ ] Phase 11: cash flow, balances, net worth, reconciliation; Accounts page
 - [ ] Phase 12: PINNED special types: ATM/cash, Venmo/Zelle, checks

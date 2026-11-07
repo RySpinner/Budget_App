@@ -174,6 +174,20 @@ changes a requirement). Newest items go at the end of each section.
 87. **Money into checking shows as negative** (a paycheck is -$2,000.00), because the app's single sign convention is "positive = money out / against us". That is correct for the database but may read oddly on screen. Showing bank amounts as money in = positive is a display choice for phase 11 (cash flow and balances); please say if it bothers you sooner.
 88. **Which account a file is for:** the BCU card and BCU checking files look the same, so the Import page can't pick between them; you choose the account. The Account ID column could tell them apart later (#74).
 
+### Phase 9, part 2: transfer rules (2026-11-07)
+89. **A rule sets either a category or "transfer"** (stored as `rules.is_transfer`, with an optional `counterpart_account_id`; migration 0006). There are no "kind only" rules (e.g. "income, category to be decided"); a category already implies the kind, as SPEC §4 describes.
+90. **The counterpart is only a hint for phase 10's matcher.** A rule never links two rows itself, and nothing uses the hint yet.
+91. **What a transfer rule may touch:**
+    - rows of unknown kind;
+    - rows a rule had set;
+    - the parser's expense/income rows: the rule wins, as category rules already do over the parser;
+    - the parser's own transfers (card payments), where it only adds the counterpart hint and the kind stays "parser".
+    Category rules still never touch the parser's transfers.
+92. **A hand-marked transfer can still get a transfer rule's hint** (rule_id set; the kind stays manual). Rules never touch rows linked into a transfer, nor split rows (apply_rules didn't skip split rows before; it does now).
+93. **When a rule stops matching** (deactivated, edited or deleted), the row goes back to Review and a kind only the rule gave it is cleared. On a credit card the kind goes back to "expense" (the card default) rather than unknown.
+94. **Saving a rule from Review for a transfer limits the rule to that row's account** (category rules from Review still apply to any account). "Pmt to card" means something different in checking than it would on a card. The Review table gained an **Other account** column for the counterpart.
+95. **"Re-run" counts say "sorted"** instead of "categorized", since a rule may now mark a transfer rather than set a category.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 

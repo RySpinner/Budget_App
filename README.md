@@ -2,7 +2,7 @@
 
 Python + Streamlit + PostgreSQL, running on a Raspberry Pi. See `SPEC.md` for requirements and `CLAUDE.md` for working rules.
 
-**Status:** v1 (phases 1–7: credit-card spending, deployed on the Pi) is done. v2 is under way (SPEC.md): phase 8, the accounts foundation, is done; bank parsers, transfer matching and balances come next. **To install on the Pi, follow [docs/deploy.md](docs/deploy.md).** Later phases are listed in SPEC.md section 10.
+**Status:** v1 (phases 1–7: credit-card spending, deployed on the Pi) is done. v2 is under way (SPEC.md): phases 8 (accounts foundation) and 9 (BCU checking, balance snapshots, transfer rules) are done; transfer matching and balance reports come next. **To install on the Pi, follow [docs/deploy.md](docs/deploy.md).** Later phases are listed in SPEC.md section 10.
 
 ## Setup
 
@@ -87,9 +87,9 @@ Then open http://localhost:8501. Pages:
 - **Budgets:** set each top-level category's monthly amount from a chosen month onward. Earlier months keep their old budget.
 - The **Import** page takes CSV uploads (drag and drop, several at once). It picks the account when only one active account's parser can read the file, shows a preview (new / duplicate / excluded / uncategorized / transfers), and writes nothing until you click Import. Past imports are listed below it, with undo.
 
-- **Review** lists uncategorized transactions. Pick a category for any row; tick *Save as rule* to also create a rule (pre-filled pattern, editable) that categorizes matching rows from now on.
+- **Review** lists uncategorized transactions. Pick a category for any row, or *Transfer between our accounts* (optionally naming the **Other account**); tick *Save as rule* to also create a rule (pre-filled pattern, editable) that handles matching rows from now on. A transfer rule saved here only applies to that row's account.
 - **Transactions** shows spending by default; the **Kind** filter switches to income, transfers, rows whose kind isn't known yet, or everything. Further filters: month, category, subcategory, account and purchaser. Choosing one top-level category gives the old per-sheet layout: date, amount, running monthly total, merchant, account, budget-to-date, note, purchaser. Edit category (or choose *Transfer between our accounts*), note and purchaser in the table and press Save. Below the table you can split a spending or income row across categories (lines must add up exactly), delete a manual entry, and add a manual entry (the Cash account by default).
-- **Rules** lists every rule with how many transactions it currently covers. Edit, deactivate or delete rules, or add new ones, then re-run them. Rules are tried by priority (lower first) and the first match wins. Rules never change a category you chose by hand.
+- **Rules** lists every rule with how many transactions it currently covers. A rule **sets** a category, or marks rows as a transfer between your accounts (with an optional **other account**, used later to pair the two sides). Edit, deactivate or delete rules, or add new ones, then re-run them. Rules are tried by priority (lower first) and the first match wins. Rules never change a category or kind you chose by hand.
 
 Rules also run automatically on new rows during import; the preview shows which category each row will get. To re-run all rules from the command line: `python -m budget.rules`.
 
