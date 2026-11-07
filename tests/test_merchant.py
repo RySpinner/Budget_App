@@ -22,3 +22,11 @@ def test_reference_number_suffix_removed():
 
 def test_store_number_glued_to_city_removed():
     assert clean_merchant("FAKE GROCER #123 000000SPRINGFIELD      IL") == "FAKE GROCER SPRINGFIELD"
+
+
+def test_bank_statement_descriptions():
+    ach = ("Deposit ACH FAKE EMPLOYER TYPE: DIR DEP ID: 0000000000 CO: FAKE EMPLOYER "
+           "Entry Class Code: PPD ACH Trace Number: 0000000000000000")
+    assert clean_merchant(ach) == "FAKE EMPLOYER"
+    assert clean_merchant("Withdrawal FAKE GROCER") == "FAKE GROCER"
+    assert clean_merchant("Withdrawal Home Banking Pmt to card XXXXXXXXXXXX-0000") == "Home Banking Pmt to card"

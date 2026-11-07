@@ -157,6 +157,23 @@ changes a requirement). Newest items go at the end of each section.
 79. **Only the full 11-column Amex export is accepted** (the one with Extended Details). If Amex offers a shorter download (just Date, Description, Amount), it would need adding.
 80. **Merchant cleanup drops a padded store number glued to the city** ("000000CHICAGO" becomes "CHICAGO"). "HLU*HULUPLUS HULU.COM/BILL" is left as it is; a rule can set a nicer merchant name.
 
+### Phase 9, part 1: BCU checking (2026-11-07)
+81. **One `bcu` parser for both the BCU card and BCU checking.** It's the same export format. The parser now leaves rows it can't classify as *unknown*. The importer turns unknown rows into expenses on a credit card (everything there that isn't a payment is a purchase, refund or fee); in checking they stay unknown and go to Review. The BCU card behaves exactly as before.
+82. **BCU checking classification by description:**
+    - "Pmt to card" is a transfer (card payment);
+    - "DIR DEP" (direct deposit) is income, without a category yet;
+    - everything else is unknown.
+    Unknown rows aren't spending until someone gives them a category (or, later, a rule does). They show in Review, not in the Dashboard's Uncategorized total.
+83. **Balance snapshots:** the last balance of each day in the file is saved. The file's date order decides which row is last; same-day-only files are assumed newest first. A later import of the same day replaces the earlier balance (a mid-day export may not have the whole day).
+84. **Snapshots belong to their import batch** (migration 0005), so undoing an import removes them. Caveat: if a later batch re-saved a day, undoing that later batch removes the day's balance even though the earlier file also had it. Re-importing restores it.
+85. **Only asset accounts get balance snapshots for now.** No card export with a balance has been seen, and whether it would show what's owed as positive or negative is unknown.
+86. **Merchant cleanup for bank rows:**
+    - an ACH entry uses its company name ("CO: MY JOB …" becomes "MY JOB");
+    - a leading "Deposit", "Deposit ACH" or "Withdrawal" is dropped;
+    - a masked card number with a dash ("XXXXXXXXXXXX-1234") counts as noise.
+87. **Money into checking shows as negative** (a paycheck is -$2,000.00), because the app's single sign convention is "positive = money out / against us". That is correct for the database but may read oddly on screen. Showing bank amounts as money in = positive is a display choice for phase 11 (cash flow and balances); please say if it bothers you sooner.
+88. **Which account a file is for:** the BCU card and BCU checking files look the same, so the Import page can't pick between them; you choose the account. The Account ID column could tell them apart later (#74).
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 

@@ -1,4 +1,4 @@
-"""Import account CSV exports (cards now; bank accounts from phase 9) from the command line.
+"""Import account CSV exports (cards and bank accounts) from the command line.
 
 Phase 2 uses this to prove the import pipeline works; Phase 3 puts the same
 preview / confirm / undo steps on a Streamlit page.
@@ -29,6 +29,11 @@ def show_preview(p) -> None:
     print(f"  excluded:       {len(p.excluded_rows)}")
     print(f"  uncategorized:  {p.uncategorized_count}")
     print(f"  transfers:      {p.transfer_count}  (e.g. card payments; matched to the other account in phase 10)")
+    if p.unknown_kind_count:
+        print(f"  not classified: {p.unknown_kind_count}  (spending, income or transfer? decided in Review)")
+    if p.balances:
+        day, balance = p.balances[-1]
+        print(f"  balance:        {format_cents(balance)} on {day}  ({len(p.balances)} days of balances saved)")
     if p.already_imported_batch_ids:
         print(f"  NOTE: this exact file was already imported (batch {', '.join(map(str, p.already_imported_batch_ids))})")
     if p.new_rows:

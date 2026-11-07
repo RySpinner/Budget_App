@@ -15,7 +15,14 @@ kind says what the row is, when the parser can tell:
     "income"    money earned (paycheck, interest received)
     "transfer"  a move between two of our own accounts (e.g. a card payment)
     "excluded"  not stored at all (pending rows, non-transactions)
-    None        unknown: rules or a person decide later (Review)
+    None        unknown: rules or a person decide later (Review). On a
+                credit card, the importer treats unknown as "expense",
+                since everything on a card that isn't a payment is a
+                purchase, refund or fee.
+
+balance_cents is the running balance as the institution states it, in the
+account's own terms (money held in a checking account). The importer turns
+the end-of-day balances into balance snapshots.
 """
 
 from dataclasses import dataclass, field
@@ -34,6 +41,7 @@ class ParsedRow:
     raw_description: str
     raw_row: dict = field(default_factory=dict)  # original CSV row, column -> text
     reason: str | None = None                    # why excluded (required then), or a hint such as "card payment"
+    balance_cents: int | None = None             # the bank's running balance after this row, if the export has one
 
     def __post_init__(self):
         if self.txn_date is None and self.posted_date is None:

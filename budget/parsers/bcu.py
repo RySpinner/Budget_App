@@ -1,28 +1,35 @@
-"""Parser for BCU (credit union) credit card CSV exports. Parser key: "bcu".
+"""Parser for BCU (credit union) CSV exports, credit card and checking. Parser key: "bcu".
 
-Format (seen in a real export, as downloaded):
+BCU uses one export format for every account (seen in real exports, as downloaded):
     Account ID,Transaction ID,Date,Name,Description,Check Number,Category,Tags,Amount,Balance
-    3333333-444...,2026-10-16:222...:Amazon.c,10/16/26,,Amazon.com*ASDF ... REF #222...,,,,"-$100.00",
+    card:     3333333-444...,2026-10-16:222...:Amazon.c,10/16/26,,Amazon.com*ASDF ... REF #222...,,,,"-$100.00",
+    checking: 3333333-444...,20261104:111...,11/04/26,,Deposit ACH MY JOB TYPE: DIR DEP ...,,,,"$2000.00","$3,000.00"
 
 - One date, MM/DD/YY (two-digit year). Treated as the transaction date;
   posted_date stays NULL.
-- The credit union's sign is the opposite of ours: charges are NEGATIVE
-  ("-$100.00") and payments/refunds positive ("$100.00"). We flip it, so
-  spending is positive. Amounts are quoted, so a thousands comma is safe.
+- BCU's sign is the opposite of ours on both kinds of account: money out
+  (a card charge, a checking withdrawal) is NEGATIVE, money in is positive.
+  We flip it, so money out is positive. Amounts are quoted, so a thousands
+  comma is safe.
+- Balance: empty for the card; for checking it is the running balance after
+  each row, kept as balance_cents (as stated: money held is positive).
 - There is no Type or Status column, so the description decides:
-  "PAYMENT - THANK YOU" -> transfer (card payment), rewards wording ->
-  excluded (rewards are OPEN), everything else -> expense (a positive
-  credit union amount becomes a negative expense, i.e. a refund).
-- Name, Check Number, Category, Tags and Balance were empty for this card.
-  They are kept in raw_row. Description is the raw description (Name is used
-  only if Description is empty).
+    "PAYMENT - THANK YOU"        -> transfer (card payment, the card's side)
+    "Pmt to card"                -> transfer (card payment, the checking side)
+    "DIR DEP" (direct deposit)   -> income (usually a paycheck)
+    rewards wording              -> excluded (rewards are OPEN)
+    anything else                -> unknown (None). On the card the importer
+                                    makes that an expense (a purchase, or a
+                                    refund if negative); in checking it goes
+                                    to Review, where rules or a person decide.
+- Name, Check Number, Category and Tags were empty in both samples. They are
+  kept in raw_row. Description is the raw description (Name is used only if
+  Description is empty).
 - Descriptions aren't quoted. If one contains a comma, the columns before
   Description (4) and after it (5) are fixed, so anything extra in the
   middle is re-joined into the description.
-- Unconfirmed (see DECISIONS.md): how pending rows, refunds and rewards look.
-  The Transaction ID is unique per row and the same column layout has a
-  Check Number and Balance, so this looks like the credit union's general
-  export format and may also serve its checking/savings accounts (phase 9).
+- Unconfirmed (see DECISIONS.md): how pending rows, refunds, rewards, debit
+  card purchases, transfers to savings and ATM withdrawals look.
 """
 
 import csv
@@ -42,6 +49,8 @@ AFTER_DESCRIPTION = 5       # Check Number, Category, Tags, Amount, Balance
 
 SPECIAL_ROWS = [
     (re.compile(r"\bPAYMENT\b.*\bTHANK YOU\b", re.I), "transfer", "card payment"),
+    (re.compile(r"\bPMT TO CARD\b", re.I), "transfer", "card payment"),
+    (re.compile(r"\bDIR DEP\b", re.I), "income", "direct deposit"),
     (re.compile(r"\b(REWARDS? REDEMPTION|REDEMPTION|CASH ?BACK)\b", re.I), "excluded", "rewards redemption"),
 ]
 
@@ -84,9 +93,10 @@ def _parse_row(fields: list[str]) -> ParsedRow:
         raise ValueError("Row has no description")
     if not col["Amount"].strip():
         raise ValueError("Row has no amount")
-    amount = -parse_cents(col["Amount"])     # credit union: negative = charge; ours: positive = spending
+    amount = -parse_cents(col["Amount"])     # BCU: negative = money out; ours: positive = money out
+    balance = parse_cents(col["Balance"]) if col["Balance"].strip() else None
 
-    kind, reason = "expense", None           # purchases, refunds, interest, fees
+    kind, reason = None, None                # unknown: see the module docstring
     for pattern, special_kind, why in SPECIAL_ROWS:
         if pattern.search(description):
             kind, reason = special_kind, why
@@ -100,4 +110,5 @@ def _parse_row(fields: list[str]) -> ParsedRow:
         raw_description=description,
         raw_row=col,          # original fields by column name (a split description re-joined)
         reason=reason,
+        balance_cents=balance,
     )

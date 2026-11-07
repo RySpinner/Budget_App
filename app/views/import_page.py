@@ -117,6 +117,13 @@ for f in uploaded or []:
         if preview.already_imported_batch_ids:
             batches = ", ".join(map(str, preview.already_imported_batch_ids))
             st.info(md(f"This exact file was already imported (batch {batches}). Duplicates will be skipped."))
+        if preview.unknown_kind_count:
+            st.caption(md(f"{preview.unknown_kind_count} new rows aren't classified yet (spending, income or a "
+                          "transfer); they go to **Review**."))
+        if preview.balances:
+            last_day, last_balance = preview.balances[-1]
+            st.caption(md(f"Balance in the file: {format_cents(last_balance)} on {last_day:%b} {last_day.day}, "
+                          f"{last_day:%Y} ({len(preview.balances)} days of end-of-day balances will be saved)."))
 
         if preview.new_rows:
             st.markdown("**New rows**")

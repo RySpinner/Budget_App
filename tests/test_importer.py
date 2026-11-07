@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -212,3 +213,78 @@ def test_hand_entered_account_cannot_import(conn, citi_card):
     cash = conn.execute("SELECT id FROM accounts WHERE account_type = 'cash'").fetchone()[0]
     with pytest.raises(ValueError, match="entered by hand"):
         preview_import(conn, cash, "x.csv", FIXTURE.read_bytes())
+
+
+# ---------------------------------------------------------------------------
+# Bank accounts (phase 9): BCU checking
+# ---------------------------------------------------------------------------
+FIXTURES = Path(__file__).parent / "fixtures" / "bcu"
+
+
+@pytest.fixture
+def bcu(conn, citi_card):
+    q = lambda sql, *a: conn.execute(sql, a).fetchone()[0]  # noqa: E731
+    checking = q("INSERT INTO accounts (display_name, institution, owner_person_id, parser_key, account_class, "
+                 "account_type) VALUES ('BCU checking', 'BCU', %s, 'bcu', 'asset', 'checking') RETURNING id",
+                 citi_card["person"])
+    card = q("INSERT INTO accounts (display_name, institution, owner_person_id, parser_key, account_class, "
+             "account_type) VALUES ('BCU card', 'BCU', %s, 'bcu', 'liability', 'credit_card') RETURNING id",
+             citi_card["person"])
+    return {"checking": checking, "card": card}
+
+
+def snapshots(conn, account_id):
+    return conn.execute("SELECT as_of_date, balance_cents FROM balance_snapshots WHERE account_id = %s "
+                        "ORDER BY as_of_date", (account_id,)).fetchall()
+
+
+def test_checking_preview_kinds_and_balances(conn, bcu):
+    p = preview_import(conn, bcu["checking"], "checking.csv", (FIXTURES / "checking.csv").read_bytes())
+    assert len(p.new_rows) == 6                      # two identical cafe rows both kept
+    assert [n.kind for n in p.new_rows] == ["income", "transfer", None, None, None, None]
+    assert p.unknown_kind_count == 4
+    assert p.transfer_count == 1
+    # End of day: the file is newest first, so each day's first row is its last in time.
+    assert p.balances == [(date(2026, 10, 31), 100000), (date(2026, 11, 1), 125000),
+                          (date(2026, 11, 3), 100000), (date(2026, 11, 4), 300000)]
+
+
+def test_card_rows_of_unknown_kind_become_expenses(conn, bcu):
+    p = preview_import(conn, bcu["card"], "sample.csv", (FIXTURES / "sample.csv").read_bytes())
+    kinds = {n.parsed.raw_description.split(" REF")[0]: n.kind for n in p.new_rows}
+    assert kinds["PAYMENT - THANK YOU"] == "transfer"
+    assert kinds["FAKE CAFE SPRINGFIELD IL"] == "expense"
+    assert kinds["FAKE OUTDOOR STORE"] == "expense"         # a refund
+    assert p.balances == []                                  # card balances aren't recorded yet
+
+
+def test_checking_commit_saves_snapshots_and_undo_removes_them(conn, bcu, tmp_path):
+    data = (FIXTURES / "checking.csv").read_bytes()
+    batch = commit_import(conn, preview_import(conn, bcu["checking"], "checking.csv", data), archive=tmp_path)
+    assert snapshots(conn, bcu["checking"])[-1] == (date(2026, 11, 4), 300000)
+    assert len(snapshots(conn, bcu["checking"])) == 4
+    kinds = dict(conn.execute("SELECT kind, count(*) FROM transactions WHERE account_id = %s GROUP BY kind",
+                              (bcu["checking"],)).fetchall())
+    assert kinds == {"income": 1, "transfer": 1, None: 4}
+    undo_import(conn, batch)
+    assert snapshots(conn, bcu["checking"]) == []
+
+
+def test_later_import_replaces_a_days_balance(conn, bcu, tmp_path):
+    header, *rows = (FIXTURES / "checking.csv").read_text().splitlines()
+    early = "\n".join([header, rows[2]]).encode()          # 11/03 mid-day: $1,200.00
+    commit_import(conn, preview_import(conn, bcu["checking"], "early.csv", early), archive=tmp_path)
+    assert snapshots(conn, bcu["checking"]) == [(date(2026, 11, 3), 120000)]
+    full = (FIXTURES / "checking.csv").read_bytes()
+    commit_import(conn, preview_import(conn, bcu["checking"], "full.csv", full), archive=tmp_path)
+    assert (date(2026, 11, 3), 100000) in snapshots(conn, bcu["checking"])
+
+
+def test_unknown_checking_rows_show_in_review_not_spending(conn, bcu, tmp_path):
+    data = (FIXTURES / "checking.csv").read_bytes()
+    commit_import(conn, preview_import(conn, bcu["checking"], "checking.csv", data), archive=tmp_path)
+    spending = conn.execute("SELECT count(*) FROM spending_lines WHERE account_id = %s", (bcu["checking"],)).fetchone()[0]
+    assert spending == 0
+    review = conn.execute("SELECT count(*) FROM transactions WHERE account_id = %s AND category_id IS NULL "
+                          "AND kind IS DISTINCT FROM 'transfer'", (bcu["checking"],)).fetchone()[0]
+    assert review == 5        # 4 unknown + the paycheck (income, still needs a category)

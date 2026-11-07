@@ -102,7 +102,7 @@ python -m budget.import_csv --batches                  # past imports
 python -m budget.import_csv --undo 7                   # undo batch 7
 ```
 
-Each account's `parser_key` picks its parser: `citi`, `chase`, `bcu` (BCU credit union Visa) or `amex` so far (bank parsers come in phase 9). When the Import page can tell from a file's format which single account it belongs to, it picks the account automatically. Card payments are kept as **transfers** (money moving between your own accounts), never counted as spending. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
+Each account's `parser_key` picks its parser: `citi`, `chase`, `bcu` (BCU credit union: the Visa card and checking use the same format) or `amex` so far. For bank accounts, the running balance in the file is saved as the account's end-of-day balance, and rows the parser can't classify (spending, income or transfer?) wait in Review. When the Import page can tell from a file's format which single account it belongs to, it picks the account automatically. Card payments are kept as **transfers** (money moving between your own accounts), never counted as spending. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
 
 ## Tests
 

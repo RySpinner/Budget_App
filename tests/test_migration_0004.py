@@ -48,7 +48,7 @@ def test_v1_data_survives_migration(v1_database):
         conn.execute("INSERT INTO budgets (category_id, monthly_amount_cents, effective_from) VALUES (%s, 10000, '2026-10-01')", (top,))
         conn.commit()
 
-        assert apply_migrations(conn) == ["0004_accounts.sql"]
+        assert apply_migrations(conn, up_to="0004") == ["0004_accounts.sql"]
 
         acct = conn.execute("SELECT id, display_name, institution, account_class, account_type, parser_key "
                             "FROM accounts WHERE id = %s", (card,)).fetchone()

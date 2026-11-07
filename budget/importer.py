@@ -14,7 +14,8 @@ file again inserts nothing new.
 import hashlib
 import json
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import date
 from pathlib import Path
 
 import psycopg
@@ -58,11 +59,17 @@ class ImportPreview:
     duplicate_rows: list[NewRow]
     excluded_rows: list[ParsedRow]
     already_imported_batch_ids: list[int]   # earlier, non-undone batches of this exact file
+    balances: list[tuple[date, int]] | None = None  # end-of-day balances from the file, oldest first (assets only)
 
     @property
     def uncategorized_count(self) -> int:
         """New rows that will need a category in Review (transfers don't have one)."""
         return sum(1 for n in self.new_rows if n.rule is None and n.kind != "transfer")
+
+    @property
+    def unknown_kind_count(self) -> int:
+        """New rows nobody can classify yet (bank rows); Review decides what they are."""
+        return sum(1 for n in self.new_rows if n.kind is None)
 
     @property
     def transfer_count(self) -> int:
@@ -129,17 +136,40 @@ def detect_account(conn: psycopg.Connection, data: bytes) -> int | None:
     return candidates[0] if len(candidates) == 1 else None
 
 
+def end_of_day_balances(rows: list[ParsedRow]) -> list[tuple[date, int]]:
+    """The balance at the end of each day, from rows that carry a running balance.
+
+    Within one day the export's own order decides which row came last. Exports
+    list rows either newest first or oldest first; the dates tell which. If
+    every row is on the same day, newest first is assumed (BCU's order).
+    Returned oldest first.
+    """
+    with_balance = [r for r in rows if r.balance_cents is not None]
+    if not with_balance:
+        return []
+    days = [r.txn_date or r.posted_date for r in with_balance]
+    oldest_first = days[0] < days[-1]
+    balances: dict[date, int] = {}
+    for day, row in zip(days, with_balance):
+        if oldest_first or day not in balances:   # keep the day's last row in time
+            balances[day] = row.balance_cents
+    return sorted(balances.items())
+
+
 def preview_import(conn: psycopg.Connection, account_id: int, filename: str, data: bytes) -> ImportPreview:
     account = conn.execute(
-        "SELECT display_name, parser_key, owner_person_id FROM accounts WHERE id = %s", (account_id,)
+        "SELECT display_name, parser_key, owner_person_id, account_class FROM accounts WHERE id = %s", (account_id,)
     ).fetchone()
     if account is None:
         raise ValueError(f"No account with id {account_id}")
-    account_name, parser_key, owner_id = account
+    account_name, parser_key, owner_id, account_class = account
     if parser_key is None:
         raise ValueError(f"{account_name} has no parser; its transactions are entered by hand")
 
     parsed = get_parser(parser_key)(decode_csv(data))
+    if account_class == "liability":
+        # On a credit card, anything that isn't a payment or transfer is a purchase, refund or fee.
+        parsed = [replace(r, kind="expense") if r.kind is None else r for r in parsed]
     kept = [r for r in parsed if r.kind != "excluded"]
     excluded = [r for r in parsed if r.kind == "excluded"]
 
@@ -176,6 +206,8 @@ def preview_import(conn: psycopg.Connection, account_id: int, filename: str, dat
         duplicate_rows=[c for c in candidates if c.fingerprint in existing],
         excluded_rows=excluded,
         already_imported_batch_ids=earlier,
+        # Only asset accounts for now: how a card export states what is owed hasn't been seen yet.
+        balances=end_of_day_balances(kept) if account_class == "asset" else [],
     )
 
 
@@ -218,6 +250,19 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
             )
             inserted += cur.rowcount
 
+        # Balances as the bank states them. A later import of the same day replaces the
+        # earlier one (an export taken mid-day may not have had the whole day yet).
+        for as_of, balance in preview.balances or []:
+            conn.execute(
+                """
+                INSERT INTO balance_snapshots (account_id, as_of_date, balance_cents, source, import_batch_id)
+                VALUES (%s, %s, %s, 'import', %s)
+                ON CONFLICT (account_id, as_of_date, source)
+                DO UPDATE SET balance_cents = EXCLUDED.balance_cents, import_batch_id = EXCLUDED.import_batch_id
+                """,
+                (preview.account_id, as_of, balance, batch_id),
+            )
+
         # Rows that became duplicates since the preview (rare) count as duplicates.
         duplicates = len(preview.duplicate_rows) + (len(preview.new_rows) - inserted)
         conn.execute(
@@ -232,7 +277,8 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
 
 
 def undo_import(conn: psycopg.Connection, batch_id: int) -> int:
-    """Delete the rows a batch inserted and mark it reverted. Returns rows deleted.
+    """Delete the rows a batch inserted (and the balances it recorded) and mark it reverted.
+    Returns rows deleted.
 
     The archived file is kept, so the batch can be re-imported later.
     """
@@ -245,6 +291,7 @@ def undo_import(conn: psycopg.Connection, batch_id: int) -> int:
         if batch[0] is not None:
             raise ValueError(f"Batch {batch_id} was already undone at {batch[0]}")
         deleted = conn.execute("DELETE FROM transactions WHERE import_batch_id = %s", (batch_id,)).rowcount
+        conn.execute("DELETE FROM balance_snapshots WHERE import_batch_id = %s", (batch_id,))
         conn.execute("UPDATE import_batches SET reverted_at = now() WHERE id = %s", (batch_id,))
     return deleted
 

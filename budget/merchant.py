@@ -9,11 +9,19 @@ doesn't need to be perfect: rules can set an exact merchant_name later
     "TST* PIZZA PLACE #0123 SPRINGFIELD IL"         -> "PIZZA PLACE SPRINGFIELD"
     "FAKE CAFE SPRINGFIELD IL REF #900000000000002" -> "FAKE CAFE SPRINGFIELD"
     "FAKE GROCER #123 000000SPRINGFIELD      IL"    -> "FAKE GROCER SPRINGFIELD"
+    "Deposit ACH FAKE EMPLOYER TYPE: DIR DEP ID: 00 CO: FAKE EMPLOYER Entry Class Code: PPD ..."
+                                                    -> "FAKE EMPLOYER"
+    "Withdrawal FAKE GROCER"                        -> "FAKE GROCER"
 """
 
 import re
 
 # Payment-processor prefixes such as "SQ *", "TST*", "PAYPAL *".
+# Bank-statement words in front of the payee (BCU checking), e.g. "Deposit ACH ", "Withdrawal ".
+BANK_PREFIX = re.compile(r"^(Deposit|Withdrawal)( ACH)?\s+", re.I)
+# An ACH entry names the company after "CO:", e.g. "... CO: FAKE EMPLOYER Entry Class Code: PPD ...".
+ACH_COMPANY = re.compile(r"\bCO:\s*(.+?)\s*(?:\bEntry Class Code:|\bACH Trace Number:|$)")
+
 # A trailing reference number, e.g. " REF #22222222222222222" (credit union).
 REFERENCE_SUFFIX = re.compile(r"\s+REF\s*#?\s*\d+\s*$", re.I)
 
@@ -29,7 +37,7 @@ def _is_noise(token: str) -> bool:
     """Tokens that carry no meaning at the end of a description."""
     return (
         token.lower() == "null"
-        or re.fullmatch(r"X{4,}\d{0,4}", token, re.I) is not None   # masked card number
+        or re.fullmatch(r"X{4,}-?\d{0,4}", token, re.I) is not None   # masked card number
         or re.fullmatch(r"#?\d[\d-]*", token) is not None             # store / phone / reference numbers
         or token.upper() in US_STATES
     )
@@ -37,6 +45,10 @@ def _is_noise(token: str) -> bool:
 
 def clean_merchant(raw_description: str) -> str:
     text = " ".join(raw_description.split())          # collapse whitespace
+    ach = ACH_COMPANY.search(text)
+    if ach and ach.group(1):
+        return ach.group(1)
+    text = BANK_PREFIX.sub("", text)
     text = REFERENCE_SUFFIX.sub("", text)
     text = PROCESSOR_PREFIX.sub("", text)
     # A padded store number glued to the city (Amex), e.g. "000000CHICAGO" -> "CHICAGO".

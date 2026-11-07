@@ -43,7 +43,7 @@ def test_joint_person_and_cash_account_exist(conn):
 
 def test_balance_snapshot_unique_per_day_and_source(conn, basics):
     sql = ("INSERT INTO balance_snapshots (account_id, as_of_date, balance_cents, source) "
-           "VALUES (%s, '2026-01-31', 123456, 'import')")
+           "VALUES (%s, '2026-01-31', 123456, 'statement')")
     conn.execute(sql, (basics["checking"],))
     expect_error(conn, sql, (basics["checking"],), errors.UniqueViolation)
 
@@ -162,3 +162,9 @@ def test_transfers_and_income_never_in_spending(conn, add_card_txn, basics):
                  category_source="manual", account_id=basics["checking"])                   # paycheck
     assert conn.execute("SELECT count(*), sum(amount_cents) FROM spending_lines").fetchone() == (1, 1000)
     assert conn.execute("SELECT count(*) FROM transaction_lines").fetchone()[0] == 3
+
+
+def test_imported_snapshot_needs_its_batch(conn, basics):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        conn.execute("INSERT INTO balance_snapshots (account_id, as_of_date, balance_cents, source) "
+                     "VALUES (%s, '2026-11-01', 100, 'import')", (basics["checking"],))
