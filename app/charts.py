@@ -76,6 +76,13 @@ def pace_chart(df: pd.DataFrame, mode: str) -> alt.Chart:
     return _finish(alt.layer(track, spent, pace).properties(height=alt.Step(40)), mode)
 
 
+def _month_order(df: pd.DataFrame) -> list[str]:
+    """Month labels in date order. Sorting the axis by month_start directly isn't
+    safe: on a stacked chart Vega-Lite sorts by the *sum* of that field across a
+    column's segments, so a month with more categories would sort later."""
+    return list(df.sort_values("month_start")["Month"].drop_duplicates())
+
+
 def trend_chart(df: pd.DataFrame, categories_in_order: list[str], mode: str) -> alt.Chart:
     """Stacked monthly columns by top-level category.
 
@@ -85,7 +92,7 @@ def trend_chart(df: pd.DataFrame, categories_in_order: list[str], mode: str) -> 
     order = categories_in_order + [UNCATEGORIZED]
     df = df.assign(stack_order=df["Category"].map({name: i for i, name in enumerate(order)}))
     chart = alt.Chart(df).mark_bar(stroke=ink["surface"], strokeWidth=2, cornerRadius=2).encode(
-        x=alt.X("Month:N", sort=alt.SortField("month_start"), title=None,
+        x=alt.X("Month:N", sort=_month_order(df), title=None,
                 axis=_axis(mode, labelAngle=0, labelColor=ink["secondary"])),
         y=alt.Y("sum(cents):Q", title=None, axis=_money_axis(mode)),
         color=alt.Color("Category:N", scale=category_colors(categories_in_order, mode), title=None),
@@ -118,7 +125,7 @@ def category_trend_chart(df: pd.DataFrame, mode: str) -> alt.Chart:
     dash = alt.StrokeDash("Series:N", scale=alt.Scale(domain=["Spent", "Budget"], range=[[1, 0], [5, 4]]),
                           legend=None)
     base = alt.Chart(df).encode(
-        x=alt.X("Month:N", sort=alt.SortField("month_start"), title=None,
+        x=alt.X("Month:N", sort=_month_order(df), title=None,
                 axis=_axis(mode, labelAngle=0, labelColor=ink["secondary"])),
         y=alt.Y("cents:Q", title=None, axis=_money_axis(mode)),
         color=color,

@@ -41,6 +41,8 @@ def test_dashboard_renders_with_numbers(db, monkeypatch):
     metrics = {m.label: m.value for m in app.metric}
     assert metrics["Spent this month"] == "$54.99"
     assert metrics["Uncategorized"] == "$9.99"
+    assert metrics["Monthly budget"] == "$200.00"      # total budget, not spending
+    assert metrics["Pace to date"].startswith("$")
     status = app.dataframe[0].value.set_index("Category")["Status"]
     assert status["Transportation"] in ("✅ On pace", "⚠️ Over pace")
     assert status["Dining & Going Out"] == "— No budget"
@@ -60,3 +62,16 @@ def test_budgets_page_saves(db, monkeypatch):
     assert any(b.label == "Save 0 budgets" for b in app.button)
     history = app.dataframe  # data_editor tables aren't listed here; just check the page ran
     assert history is not None
+
+
+def test_trend_months_in_date_order_even_when_stacks_differ():
+    """A month with more category segments must not sort after a later month."""
+    import pandas as pd
+    from app.charts import trend_chart
+    df = pd.DataFrame([
+        {"Month": "Sep 2026", "month_start": date(2026, 9, 1), "Category": c, "cents": 100, "Amount": "$1.00"}
+        for c in ("A", "B", "C", "D")
+    ] + [{"Month": "Oct 2026", "month_start": date(2026, 10, 1), "Category": "A", "cents": 100, "Amount": "$1.00"}]
+      + [{"Month": "Aug 2026", "month_start": date(2026, 8, 1), "Category": "B", "cents": 100, "Amount": "$1.00"}])
+    spec = trend_chart(df, ["A", "B", "C", "D"], "light").to_dict()
+    assert spec["encoding"]["x"]["sort"] == ["Aug 2026", "Sep 2026", "Oct 2026"]

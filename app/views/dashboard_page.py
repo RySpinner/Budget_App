@@ -52,18 +52,30 @@ category_order = [p.name for p in pace_rows]
 # ---------------------------------------------------------------------------
 total_spent = sum(p.spent_cents for p in pace_rows) + uncategorized
 budgeted = [p for p in pace_rows if p.budget_cents is not None]
-k1, k2, k3 = st.columns(3)
+k1, k2, k3, k4 = st.columns(4)
 k1.metric("Spent this month" if month == this_month else f"Spent in {month:%B}", format_cents(total_spent))
-if budgeted and as_of is not None:
+if budgeted:
     spent_b = sum(p.spent_cents for p in budgeted)
-    pace_b = sum(p.pace_cents or 0 for p in budgeted)
-    k2.metric("Budgeted categories vs pace", format_cents(spent_b),
-              delta=f"{format_cents(spent_b - pace_b)} vs pace", delta_color="inverse")
+    k2.metric("Monthly budget", format_cents(sum(p.budget_cents for p in budgeted)),
+              help="Total of the categories that have a budget.")
+    if spent_b != total_spent:
+        k2.caption(md(f"{format_cents(spent_b)} spent in budgeted categories."))
 else:
-    k2.metric("Budgeted categories vs pace", "—")
-k3.metric("Uncategorized", format_cents(uncategorized))
+    k2.metric("Monthly budget", "—")
+    k2.caption("Set budgets on the **Budgets** page.")
+if budgeted and as_of is not None:
+    pace_b = sum(p.pace_cents or 0 for p in budgeted)
+    diff = spent_b - pace_b
+    k3.metric("Pace to date", format_cents(pace_b),
+              delta=f"{format_cents(abs(diff))} {'over' if diff > 0 else 'under'} pace" if diff else "on pace",
+              delta_color="inverse" if diff > 0 else ("normal" if diff < 0 else "off"),
+              delta_arrow="up" if diff > 0 else ("down" if diff < 0 else "off"),
+              help="Where spending in budgeted categories would be if it went evenly through the month.")
+else:
+    k3.metric("Pace to date", "—")
+k4.metric("Uncategorized", format_cents(uncategorized))
 if uncategorized:
-    k3.caption("Categorize these on the **Review** page.")
+    k4.caption("Categorize these on the **Review** page.")
 
 # ---------------------------------------------------------------------------
 # Spending vs budget pace
