@@ -7,7 +7,7 @@ tests/test_parser_<issuer>.py with a fake sample CSV in tests/fixtures/<issuer>/
 
 from collections.abc import Callable
 
-from budget.parsers import amex, chase, citi, bcu
+from budget.parsers import amex, chase, citi, bcu, sofi
 from budget.parsers.base import ParsedRow
 
 PARSERS: dict[str, Callable[[str], list[ParsedRow]]] = {
@@ -15,6 +15,7 @@ PARSERS: dict[str, Callable[[str], list[ParsedRow]]] = {
     "chase": chase.parse,
     "bcu": bcu.parse,
     "amex": amex.parse,
+    "sofi": sofi.parse,
 }
 
 
