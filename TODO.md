@@ -15,7 +15,8 @@ decisions to reassess are in DECISIONS.md.
 - [ ] **Review DECISIONS.md #81–95** (phase 9).
 - [ ] **Decide:** should bank amounts show money in as positive on screen (DECISIONS.md #87)?
 - [ ] **Bank samples** for each checking/savings institution: header row plus a debit purchase, a deposit/paycheck, a transfer to savings, a card payment, an ATM withdrawal, and the balance column if there is one (fake amounts are fine; copy from Notepad, not Excel).
-- [ ] **Decide:** rewards / cash-back credits as income or as negative expense; the transfer matching window (default 5 days); how much cash tracking is wanted; the income categories.
+- [ ] **Review DECISIONS.md #96–102** (double-entry review: generated legs, equity entries, posted-date balances, reconciled-through, books-balance check).
+- [ ] **Decide:** rewards / cash-back credits as income or as negative expense (they'll be stored and wait in Review meanwhile); the transfer matching window (default 5 days); how much cash tracking is wanted; the income categories.
 - [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase, BCU card, Amex.
 - [ ] **Chase:** Payment confirmed. When they turn up, send a real **Return**, **Fee** and **Adjustment** row (fake amounts are fine) to confirm DECISIONS.md #48.
 - [ ] **BCU card:** payment and purchase confirmed. When they turn up, send a real **refund**, **rewards redemption**, **interest/fee** row, and say whether **pending** charges appear in the export (DECISIONS.md #69–75). If your credit union checking/savings export has the same columns, say so: phase 9 can reuse this parser.
@@ -42,9 +43,11 @@ decisions to reassess are in DECISIONS.md.
 - [x] Phase 9: first bank parser(s), with balance snapshots and kind/transfer rules
   - [x] Part 1: BCU checking parser, balance snapshots (undone with their import), card/checking kinds
   - [x] Part 2: transfer rules with an optional counterpart account (migration 0006); saving a transfer rule from Review; Rules page "Sets" / "Other account"
-- [ ] Phase 10: transfer matching and Review tabs (unmatched transfers, needs care)
-- [ ] Phase 11: cash flow, balances, net worth, reconciliation; Accounts page
-- [ ] Phase 12: PINNED special types: ATM/cash, Venmo/Zelle, checks
+- [ ] Before phase 10: store currency rewards credits (kind unknown → Review) instead of excluding them; points-only rows stay excluded
+- [ ] Phase 10: transfer matching and Review tabs (unmatched transfers, needs care); generated legs for accounts without a CSV
+- [ ] Phase 11a: reconciliation and Accounts page (posted-date balances, balance adjustments, reconciled-through dates)
+- [ ] Phase 11b: cash flow, net worth, books-balance check; Dashboard additions
+- [ ] Phase 12: PINNED special types: ATM/cash, Venmo/Zelle, checks; split lines to a category or an account; loan accounts
 - [ ] Phase 13: IOU ledger; optional history import
 - [ ] Phase 14 (future): investment accounts
 - [ ] Settings page for categories and people (accounts get their own page in phase 11).

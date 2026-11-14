@@ -28,6 +28,7 @@ Out of scope for now: automatic bank connections (Plaid etc.), investment *holdi
 1. **One transactions table; everything else is derived.** Running totals, budget-to-date, account balances, net worth and cash flow are calculated in queries/views, never stored. Category "pages" are filtered views of the same table.
 2. **Institution-agnostic core.** Each institution gets a small parser that converts its CSV into one standard record. Nothing downstream of the parsers knows which bank a row came from. Manual entries produce the same record.
 3. **Keep the raw data.** Store the bank's original description and the original CSV row, and archive the original files, so data can be reprocessed if a parser or category scheme changes.
+   - **Anything that posts in real currency is stored** *(decided 2026-11-14)*: purchases, refunds, fees, discounts, statement credits and cash-value rewards credits alike, so account balances can reconcile. Only pending rows, non-transaction lines and points-only rows (no money moves) are excluded. Points tracking may come later.
 4. **Importing and categorizing are separate steps.** Importing records facts. Categorizing (and matching transfers) is a judgment layered on top and refined over time.
 5. **Manual choices are never overwritten by rules.** This applies to categories and to a transaction's kind and transfer link.
 6. **No forced receipt splitting.** Splits are optional; an unsplit transaction uses its single category.
@@ -37,6 +38,9 @@ Out of scope for now: automatic bank connections (Plaid etc.), investment *holdi
    - Its *other side* is either a **category** (an expense or income) or **another of the household's accounts** (a transfer). Until that's known, it waits in Review.
    - The two halves ("legs") of a transfer are linked and **sum to zero**. Paying a card from checking is a transfer, which is why it is never counted as spending twice.
    - Account balances are computed from an opening balance plus transactions, and **reconciled** against balances the bank reports.
+   - An account with no CSV (Cash, a loan, value-only investments) still takes part in transfers: the app **generates its leg** when the other side is marked as a transfer to it (section 6a).
+   - Opening balances and **balance adjustments** (and, later, investment market changes) are the "equity" side: they count toward net worth but never toward spending, income or cash flow.
+   - **Books-balance check:** once Review is empty, each month's change in net worth = income − expenses + adjustments. Rows still in Review are shown as an "unassigned" total.
 9. **Not overwhelming.** Unambiguous transfers are matched automatically. People only see the rows that genuinely need a decision.
 
 ## 3. Architecture
@@ -63,7 +67,7 @@ Names are suggestions; Claude Code may refine them but should keep the structure
 - `account_type` (a subtype within the class):
   - asset: `checking`, `savings`, `cash`
   - liability: `credit_card`
-  - Reserved for the future: `brokerage`, `retirement` (asset); `loan` (liability).
+  - Reserved for the future: `brokerage`, `retirement` (asset; phase 14); `loan` (liability; designed in phase 12, since a loan payment splits into principal and interest).
 - One built-in **Cash** account (asset, type `cash`, no parser) holds hand-entered cash spending and receives ATM withdrawals (PINNED, section 5a).
 - *Future investment accounts:* tracked by value only, through balance snapshots (below), with no holdings or trades. Contributions are transfers from checking.
 
@@ -147,6 +151,7 @@ Rules the database enforces:
 `id`, `transaction_id`, `amount_cents`, `category_id`, `note`.
 
 - Allowed on `expense` and `income` rows. When a transaction has splits, reports use the split lines instead of the parent's category.
+- *Planned for phase 12 (decided 2026-11-14):* a split line may point at **either a category or another account**, so one bank row can be part transfer, part expense. Examples: a loan payment (principal = transfer, interest = expense), a Venmo instant transfer with a fee, cash back at a register. Phase 10's matcher must not assume a transfer is always a whole row.
 - Split amounts must sum exactly to the parent amount (enforced in the app and the database).
 
 ### rules
@@ -174,8 +179,8 @@ Plus an optional `merchant_name` (cleaned name to apply).
 2. The account's parser converts each row to the standard record. Each parser handles its own institution's sign convention, date format and column names. Where the institution says what a row is, the parser may set `kind` (`kind_source = parser`):
    - Card payment received on a credit card → `transfer` *(v2: v1 excluded these; now they are stored as the card's leg of the payment)*.
    - Purchase, refund, interest, fee → `expense` (interest and fees count as spending, decided 2026-11-01).
-   - Pending/unposted rows and non-transaction lines are **excluded** (not stored, only counted).
-   - Rewards / cash-back credits: **OPEN**. Income, or a negative expense?
+   - Pending/unposted rows, non-transaction lines and points-only rows are **excluded** (not stored, only counted). Nothing else is (section 2, principle 3).
+   - Rewards / cash-back credits in currency (e.g. a statement credit from redeemed points): **stored**, with kind unknown so they wait in Review, including on credit cards. Whether they become income or a negative expense is still **OPEN**; a rule can sort them once decided.
    - Balance transfers between cards: `transfer`.
 3. If the CSV has a running-balance column, the last balance per date is saved as a `balance_snapshot` (`source = import`) *(v2)*.
 4. **Deduplication:** fingerprint = hash of `account_id`, dates, `amount_cents`, normalized `raw_description`, and an occurrence index. The occurrence index distinguishes legitimate identical rows (two same-price coffees on one day): the nth identical row in a file gets index n. Insert with `ON CONFLICT (fingerprint) DO NOTHING`, so overlapping imports are harmless.
@@ -212,6 +217,7 @@ These are in scope, but each gets its own design pass and a dedicated review flo
 - Exactly one candidate on each side → linked automatically (`matched_by = auto`).
 - Several candidates, or none → the row goes to the Review "Unmatched transfers" list, where a person links it or reclassifies it.
 - A transfer to/from somewhere the household doesn't track (e.g. money sent to a relative) is **not** a transfer. It's an expense or income with a category.
+- **Accounts without a CSV** (no `parser_key`: Cash, loans, value-only investments): marking a row as a transfer to one of them creates the matching leg there automatically (opposite amount, same date), linked as the transfer's other half. Undoing the original row removes the generated leg.
 
 ## 7. Reporting
 
@@ -222,9 +228,12 @@ Implement as Postgres views where practical:
 - **Budget pace:** prorated budget on a given day = monthly budget × (day of month ÷ days in month). Compare month-to-date spending against it.
 - **Running monthly total** per category, resetting each month.
 - *(v2)* **Cash flow:** per month, income vs. expense and the difference (saved / overspent). Transfers are excluded.
-- *(v2)* **Account balances:** computed per account over time (opening balance + transactions, using the sign convention).
+- *(v2)* **Account balances:** computed per account over time (opening balance + transactions, using the sign convention). Balances follow the **posted date** where there is one (that's what the bank's balance reflects); budgets and spending keep using `effective_date`.
 - *(v2)* **Net worth:** assets − liabilities, as of any date.
 - *(v2)* **Reconciliation:** for each balance snapshot, the computed balance on that date and the difference. A non-zero difference means a missing or duplicated row, or a wrong opening balance. It's shown prominently.
+  - A difference that can't be explained can be closed with a **balance adjustment** entry (section 2, principle 8).
+  - Each account has a **reconciled-through** date. Edits or import undos that touch rows on or before it warn first.
+- *(v2)* **Books-balance check:** per month, change in net worth vs. income − expenses + adjustments, with the Review "unassigned" total alongside.
 
 **OPEN:** annual subscriptions: count in the month charged (simpler, default) or spread across 12 months?
 **OPEN:** handling lumpy expenses like car maintenance: separate budget line, or excluded from the monthly pace view?
@@ -276,20 +285,23 @@ Next (v2), one phase at a time with review after each:
    - migrate existing rows: card rows → `expense`, manual rows → the Cash account;
    - change the Citi/Chase parsers to store card payments as transfer legs. Re-importing old files backfills them; dedup keeps this safe.
 9. **First bank parser(s)** for checking/savings, including balance columns → snapshots, and rules that set kind / transfer counterpart.
-10. **Transfer matching** (section 6a) and the Review tabs (Unmatched transfers, Needs care).
-11. **Reports and Accounts page:** cash flow, balances, net worth, reconciliation; Dashboard additions; Accounts page.
-12. **PINNED special types** (section 5a): ATM/cash, Venmo/Zelle, checks. Each designed and reviewed before building.
+   - *Before 10 (small):* store currency rewards credits instead of excluding them (section 5, step 2). Re-importing old files backfills them.
+10. **Transfer matching** (section 6a) and the Review tabs (Unmatched transfers, Needs care), including generated legs for accounts without a CSV.
+11. Split in two *(decided 2026-11-14)*; reconciliation comes first because it's what makes the reports trustworthy:
+    - **11a. Reconciliation and Accounts page:** posted-date balances, reconciliation against snapshots, balance adjustments, reconciled-through dates; Accounts page.
+    - **11b. Reports:** cash flow, net worth, the books-balance check; Dashboard additions.
+12. **PINNED special types** (section 5a): ATM/cash, Venmo/Zelle, checks. Each designed and reviewed before building. Includes split lines that point at a category or an account (section 4, splits) and the design of loan accounts.
 
 Later:
 
 13. IOU ledger; optional migration of history from the old spreadsheet.
-14. Investment accounts (value-only via balance snapshots; contributions as transfers).
+14. Investment accounts (value-only via balance snapshots). Contributions are transfers with generated legs; "market change" adjustments make the computed value match each snapshot.
 
 ## 11. Open questions (summary)
 
 - Bank institutions and sample CSVs (include a debit purchase, deposit/paycheck, transfer, card payment, balance column).
 - **Credits:** confirm refunds for each issuer with a real row; how a fee/interest reversal is treated (likely a negative expense).
-- Rewards / cash-back credits: income or negative expense?
+- Rewards / cash-back credits: income or negative expense? (Stored and sent to Review meanwhile; points-only rows excluded.)
 - Transfer matching window (default 5 days).
 - Final expense taxonomy and the income taxonomy (both partners).
 - Budget amounts, especially dining.

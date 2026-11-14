@@ -134,7 +134,7 @@ changes a requirement). Newest items go at the end of each section.
 ### Phase 8 as built (accounts foundation)
 61. **Existing data:** card ids are kept as account ids, so old import fingerprints still match. All existing rows become `expense` (kind source `parser` for imported rows, `manual` for hand-entered ones), and manual rows move into the Cash account.
 62. **Re-importing old card files is safe and fills in the card payments,** which are now stored as transfer legs. Everything already imported shows up as a duplicate.
-63. **Rewards credits are still excluded** until SPEC's open question (income or negative expense) is decided. Pending rows are excluded as before.
+63. *(Superseded 2026-11-14: currency rewards credits will be stored; see Decided.)* **Rewards credits are still excluded** until SPEC's open question (income or negative expense) is decided. Pending rows are excluded as before.
 64. **A manual entry without a category is recorded as an expense** awaiting a category, not as "kind unknown", because the form is mostly for cash spending.
 65. **Choosing a category sets the kind:** an income category makes the row income. "Transfer between our accounts" is offered as a choice next to the categories in Review and Transactions, rather than as a separate Kind field. Saving a *rule* for a transfer comes in phase 9.
 66. **Categorizing a linked transfer leg by hand dissolves the link,** and the other leg goes back to unmatched. Deleting a leg (e.g. undoing an import) does the same.
@@ -188,6 +188,16 @@ changes a requirement). Newest items go at the end of each section.
 94. **Saving a rule from Review for a transfer limits the rule to that row's account** (category rules from Review still apply to any account). "Pmt to card" means something different in checking than it would on a card. The Review table gained an **Other account** column for the counterpart.
 95. **"Re-run" counts say "sorted"** instead of "categorized", since a rule may now mark a transfer rather than set a category.
 
+### Double-entry review (2026-11-14)
+Proposed in a review of how close the design is to double-entry bookkeeping. Written into SPEC.md, but the details weren't individually confirmed:
+96. **Generated legs for accounts without a CSV** (Cash, loans, value-only investments). Without them, an ATM withdrawal or an investment contribution would stay "unmatched" forever, because the other account never has an imported row.
+97. **"Equity" entries:** opening balances, balance adjustments and (later) investment market changes count toward net worth but never toward spending, income or cash flow.
+98. **Balances use the posted date** where there is one; budgets keep the transaction date. Otherwise a charge made on the 30th and posted on the 2nd shows as a false reconciliation difference.
+99. **Reconciled-through date per account,** with a warning before edits or import undos touch reconciled rows, instead of strict bookkeeping's "never delete, only reverse".
+100. **Books-balance check:** monthly change in net worth = income − expenses + adjustments, with Review shown as an "unassigned" total.
+101. **Currency rewards credits on credit cards go to Review** (kind unknown) rather than defaulting to expense like other unknown card rows (#81), because income vs. negative expense is still OPEN.
+102. **Deliberately not done:** a full journal/postings rewrite, debits and credits in the UI, accrual bills (payables). One row per bank line stays, since dedup and raw data depend on it.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 
@@ -217,4 +227,7 @@ changes a requirement). Newest items go at the end of each section.
 - **[2026-11-01] Access away from home: not sure yet.** Home network only for now; Tailscale steps are written up as optional (docs/deploy.md §12).
 - **[2026-11-01] Login is remembered for 30 days** per browser.
 - **[2026-11-01] Citi autopay rows** look like `AUTOPAY <digits>RAUTOPAY AUTO-PMT`, with the amount in Credit as a negative. They're excluded as card payments.
+- **[2026-11-14] Anything that posts in real currency is stored**, including discounts and cash-value rewards credits, so balances reconcile. The earlier rewards exclusion was only meant to keep out *points*; points-only rows stay excluded for now and may be tracked later. Pending rows and non-transaction lines are still excluded. Whether rewards are income or a negative expense is still OPEN.
+- **[2026-11-14] Phase 11 is split:** 11a reconciliation and the Accounts page first, then 11b cash flow, net worth and Dashboard reports.
+- **[2026-11-14] Split lines may point at a category or another account** (planned for phase 12), so one row can be part transfer and part expense: loan payments, Venmo fees, cash back. Loan accounts are designed in phase 12. Phase 10's matcher must not assume a transfer is always a whole row.
 - **[2026-11-06] Card benefit statement credits are refunds** (negative spending), e.g. Amex's "$120 Disney Streaming Credit" -$10 offsets the Hulu charge. This does not settle the separate rewards / cash-back question (still OPEN).
