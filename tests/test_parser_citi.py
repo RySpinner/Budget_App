@@ -150,10 +150,16 @@ def test_excel_saved_and_raw_versions_dedup_to_the_same_fingerprint():
     assert [fp for _, fp in fingerprint_rows(1, raw)] == [fp for _, fp in fingerprint_rows(1, excel)]
 
 
-def test_rewards_still_excluded():
+def test_rewards_credit_stored_for_review():
     text = "Status,Date,Description,Debit,Credit\nCleared,01/02/2026,CASH REWARD REDEMPTION,,-25.00\n"
     [row] = citi.parse(text)
-    assert (row.kind, row.reason) == ("excluded", "rewards redemption")
+    assert (row.kind, row.reason, row.amount_cents) == (None, "rewards credit", -2500)
+
+
+def test_pending_rewards_credit_still_excluded():
+    text = "Status,Date,Description,Debit,Credit\nPending,01/02/2026,CASH REWARD REDEMPTION,,-25.00\n"
+    [row] = citi.parse(text)
+    assert (row.kind, row.reason) == ("excluded", "pending")
 
 
 def test_describe_labels():
@@ -163,3 +169,4 @@ def test_describe_labels():
     assert describe("transfer", -100, "card payment") == "transfer (card payment)"
     assert describe("excluded", 0, "pending") == "excluded: pending"
     assert describe(None, 5) == "needs review"
+    assert describe(None, -5, "rewards credit") == "needs review (rewards credit)"

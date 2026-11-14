@@ -14,7 +14,9 @@ Format (seen in a real export, as downloaded):
     Payment     -> transfer (the card's leg of a payment from another account)
     Fee         -> expense (interest and fees count as spending)
     Adjustment  -> expense (purchase or refund by sign), unless it looks like a
-                   rewards redemption, which is excluded (rewards are OPEN)
+                   rewards redemption: stored with kind unknown, so it waits in
+                   Review (income vs negative expense is OPEN); a $0
+                   points-only row is excluded
   "Sale" and "Payment" are confirmed with real rows; the others follow Chase's
   documented export (see DECISIONS.md).
 - Chase's own Category column ("Food & Drink") is kept in raw_row but not used
@@ -30,7 +32,7 @@ import re
 from datetime import datetime
 
 from budget.money import parse_cents
-from budget.parsers.base import ParsedRow
+from budget.parsers.base import ParsedRow, rewards_row
 
 EXPECTED_COLUMNS = ["Transaction Date", "Post Date", "Description", "Category", "Type", "Amount", "Memo"]
 
@@ -77,7 +79,7 @@ def _parse_row(fields: list[str]) -> ParsedRow:
     if row_type == "payment":
         kind, reason = "transfer", "card payment"
     elif row_type == "adjustment" and REWARDS.search(description):
-        kind, reason = "excluded", "rewards redemption"
+        kind, reason = rewards_row(amount)
 
     raw_row = dict(zip(EXPECTED_COLUMNS, fields))
     if len(fields) > len(EXPECTED_COLUMNS):

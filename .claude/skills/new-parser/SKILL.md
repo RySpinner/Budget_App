@@ -61,14 +61,18 @@ Return `ParsedRow(kind=...)` from `budget/parsers/base.py`:
 | Payment to a card (bank side, e.g. "Pmt to card") | `"transfer"` | `"card payment"` |
 | Balance transfer between cards | `"transfer"` | `"balance transfer"` |
 | Direct deposit / payroll | `"income"` | `"direct deposit"` |
-| Rewards / cash back / points redemption | `"excluded"` | `"rewards redemption"` (OPEN) |
+| Rewards / cash back / points redemption | `rewards_row(amount)` from base.py: `None` + `"rewards credit"` (stored, waits in Review), or `"excluded"` + `"points only"` for a $0 row | decided 2026-11-14 |
 | Pending / not posted | `"excluded"` | `"pending"` |
 | Card benefit statement credit (e.g. streaming credit) | expense (a refund) | decided 2026-11-06 |
 | Interest and fees | expense | decided 2026-11-01 |
 | Anything else | `"expense"` if the file says it's a purchase/refund (a Type column), else `None` | |
 
+Anything that posts in real currency is stored; only pending rows,
+non-transaction lines and points-only rows are `"excluded"`.
+
 `None` means unknown: on a credit card the importer turns it into
-`"expense"`; in a bank account it goes to Review. So a format shared by a
+`"expense"` (except a rewards credit, which stays unknown); in a bank
+account it goes to Review. The `reason` is stored as `transactions.parser_hint`. So a format shared by a
 card and a bank account should return `None` for ordinary rows (see bcu.py).
 Use the institution's own Type/Status column when it exists rather than
 guessing from the description (chase.py).

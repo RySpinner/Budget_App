@@ -22,7 +22,9 @@ same fingerprints, so importing both doesn't create duplicates.
   negative here whatever sign Citi writes them with.
 - Status "Pending" rows are excluded; only cleared rows are recorded.
 - Card payments and balance transfers are kept as kind "transfer" (the card's
-  leg of a move between our accounts); rewards credits are still excluded.
+  leg of a move between our accounts). Rewards credits are stored with kind
+  unknown, so they wait in Review (income vs negative expense is OPEN); a $0
+  points-only row is excluded.
 - Interest and fees count as spending (not excluded).
 - The "XXXXXXXXXXXX1234" at the end of a description is usually a virtual card
   number that differs by merchant, NOT the card's real last 4, so it is not
@@ -38,19 +40,19 @@ import re
 from datetime import datetime
 
 from budget.money import parse_cents
-from budget.parsers.base import ParsedRow
+from budget.parsers.base import ParsedRow, rewards_row
 
 EXPECTED_COLUMNS = ["Status", "Date", "Description", "Debit", "Credit"]
 
 # Credits that are not refunds. Card payments and balance transfers are moves
-# between our own accounts (kind "transfer", stored); rewards are still excluded
-# until SPEC decides income vs negative expense (OPEN).
+# between our own accounts (kind "transfer", stored). Rewards are handled by
+# rewards_row: stored and sent to Review, since income vs negative expense is OPEN.
 SPECIAL_ROWS = [
     (re.compile(r"\bAUTOPAY\b|\bAUTO-PMT\b", re.I), "transfer", "card payment"),
     (re.compile(r"\bPAYMENT\b.*\bTHANK YOU\b", re.I), "transfer", "card payment"),
     (re.compile(r"\bBALANCE TRANSFER\b", re.I), "transfer", "balance transfer"),
-    (re.compile(r"\b(CASH REWARD|REWARDS? REDEMPTION|THANKYOU POINTS)\b", re.I), "excluded", "rewards redemption"),
 ]
+REWARDS = re.compile(r"\b(CASH REWARD|REWARDS? REDEMPTION|THANKYOU POINTS)\b", re.I)
 
 # The start of a money amount that may continue in the next column, e.g. " -$ 1", "$2", "($1)".
 AMOUNT_START = re.compile(r"^[\s(\-$]*\d{1,3}\)?\s*$")
@@ -140,6 +142,9 @@ def _parse_row(fields: list[str]) -> ParsedRow:
             if pattern.search(description):
                 kind, reason = special_kind, why
                 break
+        else:
+            if REWARDS.search(description):
+                kind, reason = rewards_row(amount)
 
     # Keep the original fields exactly as read (nothing re-joined), by column name;
     # anything past the five named columns is kept in order under "_extra".

@@ -23,7 +23,7 @@ import psycopg
 from budget.config import archive_dir
 from budget.merchant import clean_merchant
 from budget.parsers import PARSERS, get_parser
-from budget.parsers.base import ParsedRow
+from budget.parsers.base import REWARDS_CREDIT, ParsedRow
 from budget.rules import Rule, first_match, load_rules
 
 
@@ -170,7 +170,9 @@ def preview_import(conn: psycopg.Connection, account_id: int, filename: str, dat
     parsed = get_parser(parser_key)(decode_csv(data))
     if account_class == "liability":
         # On a credit card, anything that isn't a payment or transfer is a purchase, refund or fee.
-        parsed = [replace(r, kind="expense") if r.kind is None else r for r in parsed]
+        # Rewards credits are the exception: they wait in Review (income vs negative expense is OPEN).
+        parsed = [replace(r, kind="expense") if r.kind is None and r.reason != REWARDS_CREDIT else r
+                  for r in parsed]
     kept = [r for r in parsed if r.kind != "excluded"]
     excluded = [r for r in parsed if r.kind == "excluded"]
 
@@ -239,8 +241,8 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
                 INSERT INTO transactions
                     (source, account_id, txn_date, posted_date, amount_cents, raw_description, merchant,
                      kind, kind_source, category_id, category_source, rule_id,
-                     purchaser_id, fingerprint, import_batch_id, raw_row)
-                VALUES ('import', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     purchaser_id, fingerprint, import_batch_id, raw_row, parser_hint)
+                VALUES ('import', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (fingerprint) DO NOTHING
                 """,
                 (preview.account_id, row.txn_date, row.posted_date, row.amount_cents, row.raw_description,
@@ -248,7 +250,7 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
                  new.rule.category_id if new.rule else None,
                  "rule" if new.rule and new.rule.category_id is not None else None,
                  new.rule.id if new.rule else None,
-                 preview.purchaser_id, new.fingerprint, batch_id, json.dumps(row.raw_row)),
+                 preview.purchaser_id, new.fingerprint, batch_id, json.dumps(row.raw_row), row.reason),
             )
             inserted += cur.rowcount
 

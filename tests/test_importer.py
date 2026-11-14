@@ -173,7 +173,7 @@ def test_chase_import_uses_transaction_date_and_keeps_post_date(conn, citi_card,
     ).fetchone()[0]
     data = (Path(__file__).parent / "fixtures" / "chase" / "sample.csv").read_bytes()
     p = preview_import(conn, card, "chase.csv", data)
-    assert (len(p.new_rows), len(p.excluded_rows)) == (7, 1)   # the payment is now kept as a transfer
+    assert (len(p.new_rows), len(p.excluded_rows)) == (8, 0)   # payment kept as a transfer, rewards credit kept too
     batch = commit_import(conn, p, archive=tmp_path)
     row = conn.execute(
         "SELECT txn_date, posted_date, effective_date, amount_cents FROM transactions "
@@ -181,7 +181,7 @@ def test_chase_import_uses_transaction_date_and_keeps_post_date(conn, citi_card,
     ).fetchone()
     assert [str(v) for v in row[:3]] + [row[3]] == ["2026-10-29", "2026-10-30", "2026-10-29", 888]
     again = preview_import(conn, card, "chase.csv", data)
-    assert (len(again.new_rows), len(again.duplicate_rows)) == (0, 7)
+    assert (len(again.new_rows), len(again.duplicate_rows)) == (0, 8)
 
 
 
@@ -255,6 +255,7 @@ def test_card_rows_of_unknown_kind_become_expenses(conn, bcu):
     assert kinds["PAYMENT - THANK YOU"] == "transfer"
     assert kinds["FAKE CAFE SPRINGFIELD IL"] == "expense"
     assert kinds["FAKE OUTDOOR STORE"] == "expense"         # a refund
+    assert kinds["REWARDS REDEMPTION CREDIT"] is None        # rewards credit: waits in Review
     assert p.balances == []                                  # card balances aren't recorded yet
 
 
@@ -288,3 +289,17 @@ def test_unknown_checking_rows_show_in_review_not_spending(conn, bcu, tmp_path):
     review = conn.execute("SELECT count(*) FROM transactions WHERE account_id = %s AND category_id IS NULL "
                           "AND kind IS DISTINCT FROM 'transfer'", (bcu["checking"],)).fetchone()[0]
     assert review == 5        # 4 unknown + the paycheck (income, still needs a category)
+
+
+def test_card_rewards_credit_is_stored_in_review_not_spending(conn, bcu, tmp_path):
+    data = (FIXTURES / "sample.csv").read_bytes()
+    batch = commit_import(conn, preview_import(conn, bcu["card"], "sample.csv", data), archive=tmp_path)
+    row = conn.execute(
+        "SELECT id, kind, kind_source, category_id, amount_cents, parser_hint FROM transactions "
+        "WHERE import_batch_id = %s AND raw_description LIKE 'REWARDS%%'", (batch,),
+    ).fetchone()
+    assert row[1:] == (None, None, None, -2500, "rewards credit")
+    assert conn.execute("SELECT count(*) FROM spending_lines WHERE transaction_id = %s", (row[0],)).fetchone()[0] == 0
+    # The parser's hint is kept for other rows too.
+    assert conn.execute("SELECT parser_hint FROM transactions WHERE import_batch_id = %s AND kind = 'transfer'",
+                        (batch,)).fetchone()[0] == "card payment"

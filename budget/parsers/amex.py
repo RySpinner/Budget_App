@@ -17,7 +17,10 @@ Format (seen in a real export, as downloaded):
   mangling a long number). It is kept as-is in raw_row.
 - No Type or Status column, so the description decides:
     "... PAYMENT - THANK YOU"             -> transfer (card payment)
-    rewards wording (MEMBERSHIP REWARDS)  -> excluded (rewards are OPEN)
+    rewards wording (MEMBERSHIP REWARDS)  -> kind unknown, waits in Review
+                                             (income vs negative expense is
+                                             OPEN); a $0 points-only row is
+                                             excluded
     everything else                       -> expense; a negative amount is a
                                              refund, which includes Amex's
                                              benefit statement credits such as
@@ -32,7 +35,7 @@ import re
 from datetime import datetime
 
 from budget.money import parse_cents
-from budget.parsers.base import ParsedRow
+from budget.parsers.base import ParsedRow, rewards_row
 
 EXPECTED_COLUMNS = [
     "Date", "Description", "Amount", "Extended Details", "Appears On Your Statement As",
@@ -41,9 +44,8 @@ EXPECTED_COLUMNS = [
 
 SPECIAL_ROWS = [
     (re.compile(r"\bPAYMENT\b.*\bTHANK YOU\b", re.I), "transfer", "card payment"),
-    (re.compile(r"\b(MEMBERSHIP REWARDS|REWARDS? REDEMPTION|POINTS? REDEMPTION|CASH ?BACK)\b", re.I),
-     "excluded", "rewards redemption"),
 ]
+REWARDS = re.compile(r"\b(MEMBERSHIP REWARDS|REWARDS? REDEMPTION|POINTS? REDEMPTION|CASH ?BACK)\b", re.I)
 
 
 def parse(text: str) -> list[ParsedRow]:
@@ -84,6 +86,9 @@ def _parse_row(fields: list[str]) -> ParsedRow:
         if pattern.search(description):
             kind, reason = special_kind, why
             break
+    else:
+        if REWARDS.search(description):
+            kind, reason = rewards_row(amount)
 
     return ParsedRow(
         kind=kind,

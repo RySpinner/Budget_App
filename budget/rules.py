@@ -28,6 +28,7 @@ from dataclasses import dataclass
 
 import psycopg
 
+from budget.parsers.base import REWARDS_CREDIT
 from budget.transactions import mark_as_transfer
 
 MATCH_TYPES = ("contains", "exact", "regex")
@@ -192,7 +193,11 @@ def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = No
 
 
 def _release_from_rule(conn: psycopg.Connection, txn_id: int) -> None:
-    """Undo what rules did to a row: back to Review. Manual and parser choices stay."""
+    """Undo what rules did to a row: back to Review. Manual and parser choices stay.
+
+    A card row whose kind came only from a rule goes back to "expense" (the
+    card default), except a rewards credit, which goes back to unknown.
+    """
     conn.execute(
         """
         UPDATE transactions t
@@ -200,13 +205,13 @@ def _release_from_rule(conn: psycopg.Connection, txn_id: int) -> None:
                category_source = CASE WHEN t.category_source = 'rule' THEN NULL ELSE t.category_source END,
                rule_id         = NULL,
                kind            = CASE WHEN t.kind_source <> 'rule' THEN t.kind
-                                      WHEN a.account_class = 'liability' THEN 'expense' END,
+                                      WHEN a.account_class = 'liability' AND t.parser_hint IS DISTINCT FROM %(rewards)s THEN 'expense' END,
                kind_source     = CASE WHEN t.kind_source <> 'rule' THEN t.kind_source
-                                      WHEN a.account_class = 'liability' THEN 'parser' END
+                                      WHEN a.account_class = 'liability' AND t.parser_hint IS DISTINCT FROM %(rewards)s THEN 'parser' END
           FROM accounts a
-         WHERE a.id = t.account_id AND t.id = %s
+         WHERE a.id = t.account_id AND t.id = %(id)s
         """,
-        (txn_id,),
+        {"id": txn_id, "rewards": REWARDS_CREDIT},
     )
 
 

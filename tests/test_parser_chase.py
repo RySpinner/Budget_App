@@ -41,8 +41,15 @@ def test_interest_fee_is_spending(rows):
     assert (rows[5].kind, rows[5].amount_cents) == ("expense", 321)
 
 
-def test_rewards_adjustment_excluded(rows):
-    assert (rows[6].kind, rows[6].reason) == ("excluded", "rewards redemption")
+def test_rewards_adjustment_stored_for_review(rows):
+    assert (rows[6].kind, rows[6].reason, rows[6].amount_cents) == (None, "rewards credit", -2500)
+
+
+def test_points_only_rewards_row_excluded():
+    text = ("Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n"
+            "01/02/2026,01/03/2026,REWARDS POINTS EARNED,,Adjustment,0.00,\n")
+    [row] = chase.parse(text)
+    assert (row.kind, row.reason) == ("excluded", "points only")
 
 
 def test_comma_in_description(rows):

@@ -14,11 +14,18 @@ kind says what the row is, when the parser can tell:
     "expense"   a purchase, fee or interest (negative = a refund)
     "income"    money earned (paycheck, interest received)
     "transfer"  a move between two of our own accounts (e.g. a card payment)
-    "excluded"  not stored at all (pending rows, non-transactions)
+    "excluded"  not stored at all: only pending rows, non-transactions and
+                points-only rows. Anything that posts in real currency is
+                stored (SPEC section 2, principle 3).
     None        unknown: rules or a person decide later (Review). On a
                 credit card, the importer treats unknown as "expense",
                 since everything on a card that isn't a payment is a
-                purchase, refund or fee.
+                purchase, refund or fee. The exception is a rewards credit
+                (reason REWARDS_CREDIT), which stays unknown everywhere:
+                whether rewards are income or a negative expense is OPEN.
+
+reason is stored with the transaction (transactions.parser_hint), so later
+steps still know what the parser saw, e.g. "card payment" or "rewards credit".
 
 balance_cents is the running balance as the institution states it, in the
 account's own terms (money held in a checking account). The importer turns
@@ -30,6 +37,9 @@ from datetime import date
 from typing import Literal
 
 Kind = Literal["expense", "income", "transfer", "excluded"] | None
+
+REWARDS_CREDIT = "rewards credit"
+POINTS_ONLY = "points only"
 
 
 @dataclass(frozen=True)
@@ -50,6 +60,18 @@ class ParsedRow:
             raise ValueError("An excluded row needs a reason")
 
 
+def rewards_row(amount_cents: int) -> tuple[Kind, str]:
+    """(kind, reason) for a row whose description says it is rewards / cash back.
+
+    A credit in real money (e.g. points redeemed as a statement credit) is
+    stored and waits in Review. A row that moves no money (points only) is
+    excluded. Points may be tracked later.
+    """
+    if amount_cents == 0:
+        return "excluded", POINTS_ONLY
+    return None, REWARDS_CREDIT
+
+
 def describe(kind: str | None, amount_cents: int, reason: str | None = None) -> str:
     """Short label for screens: "purchase", "refund", "transfer (card payment)", "excluded: pending"..."""
     if kind == "expense":
@@ -58,4 +80,6 @@ def describe(kind: str | None, amount_cents: int, reason: str | None = None) -> 
         return f"excluded: {reason}"
     if kind == "transfer":
         return f"transfer ({reason})" if reason else "transfer"
+    if kind is None and reason:
+        return f"needs review ({reason})"
     return kind or "needs review"

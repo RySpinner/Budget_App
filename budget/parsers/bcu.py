@@ -17,7 +17,9 @@ BCU uses one export format for every account (seen in real exports, as downloade
     "PAYMENT - THANK YOU"        -> transfer (card payment, the card's side)
     "Pmt to card"                -> transfer (card payment, the checking side)
     "DIR DEP" (direct deposit)   -> income (usually a paycheck)
-    rewards wording              -> excluded (rewards are OPEN)
+    rewards wording              -> unknown, waits in Review on the card too
+                                    (income vs negative expense is OPEN); a
+                                    $0 points-only row is excluded
     anything else                -> unknown (None). On the card the importer
                                     makes that an expense (a purchase, or a
                                     refund if negative); in checking it goes
@@ -38,7 +40,7 @@ import re
 from datetime import datetime
 
 from budget.money import parse_cents
-from budget.parsers.base import ParsedRow
+from budget.parsers.base import ParsedRow, rewards_row
 
 EXPECTED_COLUMNS = [
     "Account ID", "Transaction ID", "Date", "Name", "Description",
@@ -51,8 +53,8 @@ SPECIAL_ROWS = [
     (re.compile(r"\bPAYMENT\b.*\bTHANK YOU\b", re.I), "transfer", "card payment"),
     (re.compile(r"\bPMT TO CARD\b", re.I), "transfer", "card payment"),
     (re.compile(r"\bDIR DEP\b", re.I), "income", "direct deposit"),
-    (re.compile(r"\b(REWARDS? REDEMPTION|REDEMPTION|CASH ?BACK)\b", re.I), "excluded", "rewards redemption"),
 ]
+REWARDS = re.compile(r"\b(REWARDS? REDEMPTION|REDEMPTION|CASH ?BACK)\b", re.I)
 
 
 def parse(text: str) -> list[ParsedRow]:
@@ -101,6 +103,9 @@ def _parse_row(fields: list[str]) -> ParsedRow:
         if pattern.search(description):
             kind, reason = special_kind, why
             break
+    else:
+        if REWARDS.search(description):
+            kind, reason = rewards_row(amount)
 
     return ParsedRow(
         kind=kind,

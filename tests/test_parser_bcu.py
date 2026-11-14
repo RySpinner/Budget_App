@@ -51,8 +51,8 @@ def test_interest_amount(rows):
     assert (rows[6].kind, rows[6].amount_cents) == (None, 321)
 
 
-def test_rewards_excluded(rows):
-    assert (rows[7].kind, rows[7].reason) == ("excluded", "rewards redemption")
+def test_rewards_credit_stored_for_review(rows):
+    assert (rows[7].kind, rows[7].reason, rows[7].amount_cents) == (None, "rewards credit", -2500)
 
 
 def test_blank_rows_skipped(rows):

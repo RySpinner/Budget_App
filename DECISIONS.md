@@ -196,6 +196,9 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
 99. **Reconciled-through date per account,** with a warning before edits or import undos touch reconciled rows, instead of strict bookkeeping's "never delete, only reverse".
 100. **Books-balance check:** monthly change in net worth = income − expenses + adjustments, with Review shown as an "unassigned" total.
 101. **Currency rewards credits on credit cards go to Review** (kind unknown) rather than defaulting to expense like other unknown card rows (#81), because income vs. negative expense is still OPEN.
+    - Built 2026-11-14. The parser's `reason` is now stored as `transactions.parser_hint` (migration 0007), so when a rule lets go of a card rewards row it returns to unknown, not expense (#93). Rows imported before 0007 have no hint.
+    - **Points-only = a rewards-worded row with a $0.00 amount.** That's the only form a "points" row could take in a dollar export; none has been seen yet.
+    - The same rewards wording as before decides what a rewards row is, in each parser. A refund from a store with "REWARDS" in its name would be caught too; it would land in Review, so nothing is miscounted.
 102. **Deliberately not done:** a full journal/postings rewrite, debits and credits in the UI, accrual bills (payables). One row per bank line stays, since dedup and raw data depend on it.
 
 ### Not yet addressed

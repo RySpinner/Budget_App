@@ -186,3 +186,21 @@ def test_categorize_manually_with_income_category_sets_kind(conn, add_card_txn, 
                        account_id=basics["checking"])
     categorize_manually(conn, tid, basics["income"])
     assert conn.execute("SELECT kind, kind_source FROM transactions WHERE id = %s", (tid,)).fetchone() == ("income", "manual")
+
+
+def test_card_rewards_credit_released_by_a_rule_goes_back_to_review(conn, add_card_txn, basics):
+    # A rewards credit on a card stays "kind unknown" (income vs negative expense is OPEN),
+    # unlike other card rows, which fall back to expense when a rule lets go of them.
+    reward = add_card_txn(amount_cents=-2500, raw_description="REWARDS REDEMPTION CREDIT",
+                          kind=None, kind_source=None, parser_hint="rewards credit")
+    other = add_card_txn(amount_cents=-500, raw_description="REWARDS STORE REFUND",
+                         kind=None, kind_source=None)
+    rule_id = create_rule(conn, "rewards", basics["income"])
+    apply_rules(conn)
+    sql = "SELECT kind, kind_source, category_id FROM transactions WHERE id = %s"
+    assert conn.execute(sql, (reward,)).fetchone() == ("income", "rule", basics["income"])
+
+    conn.execute("UPDATE rules SET active = false WHERE id = %s", (rule_id,))
+    apply_rules(conn)
+    assert conn.execute(sql, (reward,)).fetchone() == (None, None, None)
+    assert conn.execute(sql, (other,)).fetchone() == ("expense", "parser", None)

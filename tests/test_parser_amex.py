@@ -53,8 +53,8 @@ def test_large_amount_and_interest(rows):
     assert (rows[8].kind, rows[8].amount_cents) == ("expense", 321)
 
 
-def test_rewards_excluded(rows):
-    assert (rows[9].kind, rows[9].reason) == ("excluded", "rewards redemption")
+def test_rewards_credit_stored_for_review(rows):
+    assert (rows[9].kind, rows[9].reason, rows[9].amount_cents) == (None, "rewards credit", -2500)
 
 
 def test_windows_line_endings():
