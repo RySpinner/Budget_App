@@ -134,7 +134,7 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 ```
 app/           Streamlit app (streamlit_app.py, views/ = one file per page, charts.py, ui.py, auth_gate.py)
 budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions, budgets, reports
-budget/parsers one module per institution (citi.py, chase.py, bcu.py, amex.py), sharing base.ParsedRow
+budget/parsers one module per institution (add one with the /new-parser Claude Code skill) (citi.py, chase.py, bcu.py, amex.py), sharing base.ParsedRow
 migrations/    versioned schema changes
 seed/          categories.toml (tracked), local.toml (untracked: people and accounts)
 config/        secrets.toml (untracked)

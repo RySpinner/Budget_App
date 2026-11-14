@@ -28,6 +28,6 @@ v1 (credit-card spending) is built; v2 (bank accounts, transfers, balances: "dou
 - Dev laptop: Windows (PowerShell). Give Windows and Mac/Linux variants for any commands in docs.
 
 ## Conventions
-- Each card issuer's parser lives in its own module with a shared interface and its own test.
+- Each institution's parser lives in its own module with a shared interface and its own test. To add one from a sample CSV, use the `/new-parser` skill (`.claude/skills/new-parser/SKILL.md`).
 - Page files live in `app/views/`, NOT `app/pages/`: Streamlit auto-lists a `pages/` folder, which would bypass the login gate.
 - Prefer clear, readable code over clever code; the owner should be able to follow it.
