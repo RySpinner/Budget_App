@@ -191,7 +191,7 @@ changes a requirement). Newest items go at the end of each section.
 ### SoFi checking parser (2026-11-14)
 96. **Parser key `sofi`**, for SoFi checking. If SoFi savings uses the same export, the same parser should read it.
 97. **SoFi's own Type column decides the kind where it can.** Only `DIRECT_DEPOSIT` is mapped (to income, direct deposit). That value is a guess, not seen yet. Every other Type stays unknown and goes to Review, including the two seen: `DIRECT_PAY` (the SoFi Plus fee, money out) and `BONUS` (the welcome bonus). Card payments are also found by description ("Pmt to card", "PAYMENT ... THANK YOU"), as for BCU, until SoFi's wording is known.
-98. **The welcome bonus is left for Review, not excluded as rewards.** Card rewards are excluded until the rewards question is settled (#63), but a bank bonus is real money arriving in the account. Excluding it would leave the account's rows out of step with its balance. It waits in Review, where it can be given an income category (e.g. Income › General) or a rule. Please confirm, or say if bank bonuses should follow whatever is decided for card rewards.
+98. ~~SoFi welcome bonus goes to Review and is categorized as income~~ Confirmed by the owner 2026-11-14 (see Decided).
 99. **Status: only "Posted" rows are imported.** "Pending" (assumed wording) and any other status are excluded, and their balances aren't used for snapshots.
 100. **Unquoted thousands commas are handled by reading the row from both ends** (as for Citi). Amount and Current balance are re-joined from their pieces. If the split can't be worked out with certainty, the row is refused with an error instead of guessed. None of this has been seen yet: the sample had small, unquoted whole-dollar amounts.
 
@@ -225,3 +225,4 @@ changes a requirement). Newest items go at the end of each section.
 - **[2026-11-01] Login is remembered for 30 days** per browser.
 - **[2026-11-01] Citi autopay rows** look like `AUTOPAY <digits>RAUTOPAY AUTO-PMT`, with the amount in Credit as a negative. They're excluded as card payments.
 - **[2026-11-06] Card benefit statement credits are refunds** (negative spending), e.g. Amex's "$120 Disney Streaming Credit" -$10 offsets the Hulu charge. This does not settle the separate rewards / cash-back question (still OPEN).
+- **[2026-11-14] Bank bonuses (e.g. SoFi's welcome bonus) are income.** They are not excluded like card rewards. The parser leaves them for Review, where they get an income category (e.g. Income › General) or a rule. This does not settle the card rewards / cash-back question (still OPEN).
