@@ -46,7 +46,7 @@ if not accounts:
 def rows_table(rows) -> pd.DataFrame:
     """Rows for display. Amounts are shown as text, so no floats are involved.
 
-    `rows` holds (ParsedRow, merchant, matching rule or None, kind it will be stored as).
+    `rows` holds (ParsedRow, merchant, matching rule or None, label for the Type column).
     """
     return pd.DataFrame(
         [
@@ -54,11 +54,11 @@ def rows_table(rows) -> pd.DataFrame:
                 "Date": r.txn_date or r.posted_date,
                 "Amount": format_cents(r.amount_cents),
                 "Merchant": merchant,
-                "Type": describe(kind, r.amount_cents, r.reason),
+                "Type": label,
                 "Category (from rules)": category_names.get(rule.category_id) if rule else "",
                 "Bank description": r.raw_description,
             }
-            for r, merchant, rule, kind in rows
+            for r, merchant, rule, label in rows
         ]
     )
 
@@ -79,7 +79,14 @@ for f in uploaded or []:
         st.subheader(f.name)
 
         if f.file_id in state.imported:
-            st.success(md(f"Imported as batch {state.imported[f.file_id]}."))
+            batch_id = state.imported[f.file_id]
+            with connect() as conn:
+                linked = conn.execute("SELECT count(*) FROM transactions WHERE import_batch_id = %s "
+                                      "AND transfer_id IS NOT NULL", (batch_id,)).fetchone()[0]
+            message = f"Imported as batch {batch_id}."
+            if linked:
+                message += f" {linked} transfer row{'s' if linked != 1 else ''} linked to the other account."
+            st.success(md(message))
             continue
 
         with connect() as conn:
@@ -111,8 +118,9 @@ for f in uploaded or []:
         c3.metric("Excluded", len(preview.excluded_rows))
         c4.metric("Uncategorized", preview.uncategorized_count)
         c5.metric("Transfers", preview.transfer_count,
-                  help="Moves between your own accounts, e.g. a card payment. Linking them to the other "
-                       "account's side comes in a later phase; they never count as spending.")
+                  help="Moves between your own accounts, e.g. a card payment. They never count as spending. "
+                       "Each is linked to the other account's side when there's exactly one match; the rest "
+                       "wait in Review, under Unmatched transfers.")
 
         if preview.already_imported_batch_ids:
             batches = ", ".join(map(str, preview.already_imported_batch_ids))
@@ -120,6 +128,9 @@ for f in uploaded or []:
         if preview.unknown_kind_count:
             st.caption(md(f"{preview.unknown_kind_count} new rows aren't classified yet (spending, income or a "
                           "transfer); they go to **Review**."))
+        if preview.needs_care_count:
+            st.caption(md(f"{preview.needs_care_count} new rows need care (ATM, Venmo/Zelle or a check). Rules "
+                          "don't sort them; decide each one in **Review**, under Needs care."))
         if preview.balances:
             last_day, last_balance = preview.balances[-1]
             st.caption(md(f"Balance in the file: {format_cents(last_balance)} on {last_day:%b} {last_day.day}, "
@@ -128,7 +139,7 @@ for f in uploaded or []:
         if preview.new_rows:
             st.markdown("**New rows**")
             st.dataframe(
-                rows_table([(n.parsed, n.merchant, n.rule, n.kind) for n in preview.new_rows]),
+                rows_table([(n.parsed, n.merchant, n.rule, n.label) for n in preview.new_rows]),
                 hide_index=True, width="stretch",
             )
         else:
@@ -136,12 +147,13 @@ for f in uploaded or []:
 
         if preview.excluded_rows:
             with st.expander(f"Excluded rows ({len(preview.excluded_rows)}): not stored"):
-                st.dataframe(rows_table([(r, "", None, r.kind) for r in preview.excluded_rows]),
+                st.dataframe(rows_table([(r, "", None, describe(r.kind, r.amount_cents, r.reason))
+                                         for r in preview.excluded_rows]),
                              hide_index=True, width="stretch")
         if preview.duplicate_rows:
             with st.expander(f"Duplicate rows ({len(preview.duplicate_rows)}): already in the database"):
                 st.dataframe(
-                    rows_table([(n.parsed, n.merchant, None, n.kind) for n in preview.duplicate_rows]),
+                    rows_table([(n.parsed, n.merchant, None, n.label) for n in preview.duplicate_rows]),
                     hide_index=True, width="stretch",
                 )
 

@@ -201,6 +201,32 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
     - The same rewards wording as before decides what a rewards row is, in each parser. A refund from a store with "REWARDS" in its name would be caught too; it would land in Review, so nothing is miscounted.
 102. **Deliberately not done:** a full journal/postings rewrite, debits and credits in the UI, accrual bills (payables). One row per bank line stays, since dedup and raw data depend on it.
 
+### Phase 10 as built: transfer matching and Review tabs (2026-11-14)
+103. **Automatic linking needs:** another account, the exact opposite amount, dates (`effective_date`) at most 5 days apart, and exactly one candidate *on each side*. At least one row must already be a transfer (from the parser, a rule or a person). **Two rows of unknown kind are never linked automatically,** since a matching amount could be a coincidence.
+104. **A transfer rule's "Other account" is used from both sides:** a row's candidates must be in the account its rule names, and a candidate's own rule (if any) must name this row's account.
+105. **A row of unknown kind that the matcher links becomes a transfer with kind source `match`** (new in migration 0008). If the link goes (import undone, unlinked by hand), it goes back to unknown, enforced by a database trigger.
+106. **`transfers.matched_by`:** `auto` = unique match; `rule` = a rule's Other account decided it (or generated the leg); `manual` = linked in Review.
+107. **Unlinking by hand stops automatic re-linking** of those rows (`no_auto_match`). Linking them by hand again clears it.
+108. **Linking by hand** offers rows up to 10 days apart, of any kind. A row that was spending or income becomes a transfer (a manual choice, so rules leave it alone); the list says "(now spending)" so that's visible.
+109. **Generated legs for accounts without a CSV:**
+    - same date, opposite amount, the original row's purchaser;
+    - described as "From <account>" or "To <account>";
+    - created from Review ("New entry in Cash"), or automatically when a transfer rule's Other account has no CSV (e.g. an "ATM" rule pointing at Cash);
+    - can't be edited or deleted directly ("change or unlink the original row");
+    - deleted when their link is undone, or when the original row is deleted (e.g. import undone).
+110. **"Not a transfer" in Unmatched transfers means choosing a category,** not "back to unknown". A category is a manual choice, so a transfer rule can't simply mark the row as a transfer again.
+111. **Needs care (SPEC §5a)** is spotted from the bank description:
+    - `ATM` (but not "ATM FEE", which is ordinary spending);
+    - `VENMO`, `ZELLE`, `CASH APP`;
+    - `CHECK 1234` / `CHK #1234` (not "CHECKCARD").
+    Rows the parser calls a transfer are never flagged. Flagged rows are skipped by rules and by automatic linking.
+    - Older rows get flagged when rules are re-run.
+    - On a credit card a flagged row still defaults to spending (kind "expense") with no category, so it counts in the Dashboard's "Uncategorized" total until decided.
+112. **Needs care tab:** choose a category (plus an optional note) or Transfer. A transfer then goes to Unmatched transfers, where an ATM withdrawal can get "New entry in Cash". No rules can be saved from this tab. The full bank description is shown, because merchant cleanup drops check numbers.
+113. **When the matcher runs:** after each import, after rules are re-run, and when a row is marked as a transfer by hand (Review or Transactions).
+114. **The Review page lists links from the last 60 days** (in an expander under Unmatched transfers) with an Unlink button.
+115. **Matching uses `effective_date`** (the transaction date when there is one). Balances in phase 11a will use the posted date (#98); matching doesn't need to.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 

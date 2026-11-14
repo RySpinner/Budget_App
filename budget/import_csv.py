@@ -18,7 +18,6 @@ from pathlib import Path
 from budget.db import connect
 from budget.importer import commit_import, preview_import, undo_import
 from budget.money import format_cents
-from budget.parsers.base import describe
 
 
 def show_preview(p) -> None:
@@ -28,7 +27,9 @@ def show_preview(p) -> None:
     print(f"  duplicate:      {len(p.duplicate_rows)}")
     print(f"  excluded:       {len(p.excluded_rows)}")
     print(f"  uncategorized:  {p.uncategorized_count}")
-    print(f"  transfers:      {p.transfer_count}  (e.g. card payments; matched to the other account in phase 10)")
+    print(f"  transfers:      {p.transfer_count}  (e.g. card payments; linked to the other account when unambiguous)")
+    if p.needs_care_count:
+        print(f"  needs care:     {p.needs_care_count}  (ATM, Venmo/Zelle, checks: decided by hand in Review)")
     if p.unknown_kind_count:
         print(f"  not classified: {p.unknown_kind_count}  (spending, income or transfer? decided in Review)")
     if p.balances:
@@ -40,7 +41,7 @@ def show_preview(p) -> None:
         print("\n  New rows:")
         for n in p.new_rows:
             r = n.parsed
-            label = describe(n.kind, r.amount_cents, r.reason)
+            label = n.label
             print(f"    {r.txn_date or r.posted_date}  {format_cents(r.amount_cents):>11}  {label:<24}  {n.merchant:<30}  {r.raw_description}")
     if p.excluded_rows:
         print("\n  Excluded:")

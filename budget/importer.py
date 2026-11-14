@@ -22,9 +22,11 @@ import psycopg
 
 from budget.config import archive_dir
 from budget.merchant import clean_merchant
+from budget.needs_care import needs_care_reason
 from budget.parsers import PARSERS, get_parser
-from budget.parsers.base import REWARDS_CREDIT, ParsedRow
+from budget.parsers.base import REWARDS_CREDIT, ParsedRow, describe
 from budget.rules import Rule, first_match, load_rules
+from budget.transfers import auto_match
 
 
 @dataclass
@@ -33,6 +35,7 @@ class NewRow:
     fingerprint: str
     merchant: str
     rule: Rule | None = None   # the rule that matched, if any (a category rule or a transfer rule)
+    needs_care: str | None = None   # e.g. "ATM / cash": decided by hand in Review, never by rules
 
     @property
     def kind(self) -> str | None:
@@ -44,6 +47,13 @@ class NewRow:
         if self.kind is None:
             return None
         return "parser" if self.kind == self.parsed.kind else "rule"
+
+    @property
+    def label(self) -> str:
+        """Short description for screens, e.g. "purchase" or "needs care (Venmo / Zelle)"."""
+        if self.needs_care:
+            return f"needs care ({self.needs_care})"
+        return describe(self.kind, self.parsed.amount_cents, self.parsed.reason)
 
 
 @dataclass
@@ -65,7 +75,13 @@ class ImportPreview:
     def uncategorized_count(self) -> int:
         """New rows that will need a category in Review (transfers don't have one)."""
         # A transfer rule leaves category_id None but kind "transfer", so it isn't counted.
-        return sum(1 for n in self.new_rows if n.rule is None and n.kind != "transfer")
+        # Rows that need care are counted separately (needs_care_count).
+        return sum(1 for n in self.new_rows if n.rule is None and n.kind != "transfer" and not n.needs_care)
+
+    @property
+    def needs_care_count(self) -> int:
+        """New ATM / Venmo / Zelle / check rows: Review's "Needs care" tab, decided by hand."""
+        return sum(1 for n in self.new_rows if n.needs_care)
 
     @property
     def unknown_kind_count(self) -> int:
@@ -74,7 +90,7 @@ class ImportPreview:
 
     @property
     def transfer_count(self) -> int:
-        """New transfer legs (e.g. card payments). Matching them to the other account comes in phase 10."""
+        """New transfer legs (e.g. card payments). They are linked to the other account's leg on import when that's unambiguous."""
         return sum(1 for n in self.new_rows if n.kind == "transfer")
 
 
@@ -179,10 +195,11 @@ def preview_import(conn: psycopg.Connection, account_id: int, filename: str, dat
     rules = load_rules(conn)
     candidates = []
     for row, fp in fingerprint_rows(account_id, kept):
-        rule = first_match(rules, row.raw_description, account_id, row.amount_cents,
-                           row.kind, "parser" if row.kind else None)
+        care = needs_care_reason(row.raw_description, row.kind)
+        rule = None if care else first_match(rules, row.raw_description, account_id, row.amount_cents,
+                                             row.kind, "parser" if row.kind else None)
         merchant = rule.merchant_name if rule and rule.merchant_name else clean_merchant(row.raw_description)
-        candidates.append(NewRow(parsed=row, fingerprint=fp, merchant=merchant, rule=rule))
+        candidates.append(NewRow(parsed=row, fingerprint=fp, merchant=merchant, rule=rule, needs_care=care))
     existing = {
         r[0]
         for r in conn.execute(
@@ -218,6 +235,9 @@ def preview_import(conn: psycopg.Connection, account_id: int, filename: str, dat
 def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Path | None = None) -> int:
     """Write the batch and its new rows, archive the original file. Returns the batch id.
 
+    Afterwards the transfer matcher links any transfer legs it can (see
+    budget/transfers.py), in this file or with rows already imported.
+
     Everything happens in one database transaction; if archiving the file
     fails, nothing is written.
     """
@@ -241,8 +261,8 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
                 INSERT INTO transactions
                     (source, account_id, txn_date, posted_date, amount_cents, raw_description, merchant,
                      kind, kind_source, category_id, category_source, rule_id,
-                     purchaser_id, fingerprint, import_batch_id, raw_row, parser_hint)
-                VALUES ('import', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     purchaser_id, fingerprint, import_batch_id, raw_row, parser_hint, needs_care)
+                VALUES ('import', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (fingerprint) DO NOTHING
                 """,
                 (preview.account_id, row.txn_date, row.posted_date, row.amount_cents, row.raw_description,
@@ -250,7 +270,8 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
                  new.rule.category_id if new.rule else None,
                  "rule" if new.rule and new.rule.category_id is not None else None,
                  new.rule.id if new.rule else None,
-                 preview.purchaser_id, new.fingerprint, batch_id, json.dumps(row.raw_row), row.reason),
+                 preview.purchaser_id, new.fingerprint, batch_id, json.dumps(row.raw_row), row.reason,
+                 new.needs_care),
             )
             inserted += cur.rowcount
 
@@ -266,6 +287,9 @@ def commit_import(conn: psycopg.Connection, preview: ImportPreview, archive: Pat
                 """,
                 (preview.account_id, as_of, balance, batch_id),
             )
+
+        # Link transfer legs to the other account's leg where that's unambiguous (SPEC 6a).
+        auto_match(conn)
 
         # Rows that became duplicates since the preview (rare) count as duplicates.
         duplicates = len(preview.duplicate_rows) + (len(preview.new_rows) - inserted)

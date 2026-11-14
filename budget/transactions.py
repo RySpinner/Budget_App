@@ -20,6 +20,8 @@ from datetime import date
 import psycopg
 from psycopg.rows import dict_row
 
+from budget.transfers import auto_match, dissolve
+
 UNCATEGORIZED = -1        # category filter value: lines with no category
 TRANSFER = "transfer"     # "category" choice meaning: a transfer between our accounts
 UNKNOWN_KIND = "unknown"  # kind filter value: rows whose kind isn't known yet
@@ -127,11 +129,24 @@ def add_running_totals(lines: list[Line]) -> None:
 # ---------------------------------------------------------------------------
 
 def _dissolve_transfer(conn: psycopg.Connection, transaction_id: int) -> None:
-    """Unlink a transfer this row belongs to; the other leg goes back to unmatched."""
-    conn.execute(
-        "DELETE FROM transfers WHERE id = (SELECT transfer_id FROM transactions WHERE id = %s)",
+    """Unlink a transfer this row belongs to; the other leg goes back to unmatched
+    (or is deleted, if the app created it)."""
+    row = conn.execute("SELECT transfer_id FROM transactions WHERE id = %s", (transaction_id,)).fetchone()
+    dissolve(conn, row[0] if row else None)
+
+
+def ensure_not_generated(conn: psycopg.Connection, transaction_id: int) -> None:
+    """Refuse to change a leg the app created for a transfer; the original row is the one to change."""
+    row = conn.execute(
+        """SELECT o.merchant, a.display_name FROM transactions t
+             JOIN transactions o ON o.id = t.generated_from_id
+             JOIN accounts a ON a.id = o.account_id
+            WHERE t.id = %s""",
         (transaction_id,),
-    )
+    ).fetchone()
+    if row:
+        raise ValueError(f"This row was created as the other half of a transfer ({row[0]} in {row[1]}). "
+                         "Change or unlink that row instead.")
 
 
 def update_line(
@@ -175,6 +190,7 @@ def update_line(
                     mark_as_transfer(conn, transaction_id)
             elif category_id is not None:
                 if category_id != current_category or current_kind == "transfer":
+                    ensure_not_generated(conn, transaction_id)
                     _dissolve_transfer(conn, transaction_id)
                     conn.execute(
                         """UPDATE transactions
@@ -198,7 +214,8 @@ def update_line(
 def mark_as_transfer(conn: psycopg.Connection, transaction_id: int) -> None:
     """Make a row a transfer between our own accounts (by hand): no category, not spending.
 
-    It stays unmatched until it is linked to the other account's leg (phase 10).
+    The transfer matcher then links it to the other account's leg if there is
+    exactly one candidate; otherwise it waits in Review (Unmatched transfers).
     """
     with conn.transaction():
         if conn.execute("SELECT 1 FROM splits WHERE transaction_id = %s", (transaction_id,)).fetchone():
@@ -210,6 +227,7 @@ def mark_as_transfer(conn: psycopg.Connection, transaction_id: int) -> None:
                 WHERE id = %s""",
             (transaction_id,),
         )
+        auto_match(conn)
 
 
 @dataclass
@@ -299,6 +317,13 @@ def add_manual(
 def delete_manual(conn: psycopg.Connection, transaction_id: int) -> None:
     """Delete a manual entry. Imported rows are removed by undoing their import instead."""
     with conn.transaction():
+        ensure_not_generated(conn, transaction_id)
         cur = conn.execute("DELETE FROM transactions WHERE id = %s AND source = 'manual'", (transaction_id,))
         if cur.rowcount == 0:
             raise ValueError("Only manual entries can be deleted here; undo the import to remove imported rows")
+
+
+def set_note(conn: psycopg.Connection, transaction_id: int, note: str | None) -> None:
+    """Set (or clear) a transaction's note."""
+    conn.execute("UPDATE transactions SET note = %s WHERE id = %s",
+                 ((note or "").strip() or None, transaction_id))

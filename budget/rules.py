@@ -11,7 +11,8 @@ the first match wins.
 
 What rules may touch:
   - Never a row a person categorized or classified by hand ('manual'), nor a
-    row that is already linked into a transfer. The database refuses manual
+    row that is already linked into a transfer, nor a row that "needs care"
+    (ATM, Venmo/Zelle, checks; see budget/needs_care.py). The database refuses manual
     overwrites too (see migrations/0004_accounts.sql).
   - A row the parser called a transfer (a card payment) only gets transfer
     rules, which can add the counterpart; category rules skip it.
@@ -28,8 +29,10 @@ from dataclasses import dataclass
 
 import psycopg
 
+from budget.needs_care import flag_existing
 from budget.parsers.base import REWARDS_CREDIT
-from budget.transactions import mark_as_transfer
+from budget.transactions import ensure_not_generated, mark_as_transfer
+from budget.transfers import auto_match, dissolve
 
 MATCH_TYPES = ("contains", "exact", "regex")
 
@@ -141,6 +144,8 @@ def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = No
     rule had set no longer matches any rule, it goes back to Review: the
     rule's category is removed, and a kind that only the rule had given it is
     cleared (on a credit card it goes back to "expense", the parser default).
+    Rows needing care are flagged first (older imports) and then skipped.
+    Afterwards the transfer matcher links whatever it now can.
     Runs in one database transaction.
     """
     rules = load_rules(conn)
@@ -151,6 +156,7 @@ def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = No
           FROM transactions t
          WHERE t.category_source IS DISTINCT FROM 'manual'
            AND t.transfer_id IS NULL
+           AND t.needs_care IS NULL
            AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)
     """
     params: tuple = ()
@@ -159,6 +165,7 @@ def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = No
         params = (transaction_ids,)
 
     with conn.transaction():
+        flag_existing(conn)
         rows = conn.execute(sql, params).fetchall()
         for txn_id, raw, account_id, amount, category_id, category_source, rule_id, kind, kind_source, merchant in rows:
             rule = first_match(rules, raw, account_id, amount, kind, kind_source)
@@ -189,6 +196,7 @@ def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = No
                 result.categorized += 1
             elif (category_id, rule_id, kind) != (rule.category_id, rule.id, rule.kind):
                 result.changed += 1
+        auto_match(conn)
     return result
 
 
@@ -289,10 +297,9 @@ def categorize_manually(
     rule categorized).
     """
     with conn.transaction():
-        conn.execute(
-            "DELETE FROM transfers WHERE id = (SELECT transfer_id FROM transactions WHERE id = %s)",
-            (transaction_id,),
-        )
+        ensure_not_generated(conn, transaction_id)
+        dissolve(conn, conn.execute("SELECT transfer_id FROM transactions WHERE id = %s",
+                                    (transaction_id,)).fetchone()[0])
         conn.execute(
             """UPDATE transactions
                   SET kind = (SELECT kind FROM categories WHERE id = %s), kind_source = 'manual',

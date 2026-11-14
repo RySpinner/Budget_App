@@ -2,7 +2,7 @@
 
 Status:
 - **v1 (phases 1–7)** is built: credit-card spending tracker, deployed on a Pi.
-- **v2 (phases 8–12)** extends it to checking and savings accounts with light double-entry bookkeeping. Agreed 2026-11-06; not yet built.
+- **v2 (phases 8–12)** extends it to checking and savings accounts with light double-entry bookkeeping. Agreed 2026-11-06; phases 8–10 built.
 
 Items marked **OPEN** still need a decision. Items marked **PINNED** are in scope, but their detailed design is deferred because they need extra review or care.
 
@@ -214,7 +214,7 @@ These are in scope, but each gets its own design pass and a dedicated review flo
 ### 6a. Transfer matching *(v2)*
 - Candidate pairs: a `transfer` leg (or a row whose kind is unknown) in one account, and one with the **opposite amount** in a **different account** within **N days** (default 5; **OPEN**).
 - A rule's `counterpart_account_id` narrows the candidates.
-- Exactly one candidate on each side → linked automatically (`matched_by = auto`).
+- Exactly one candidate on each side → linked automatically (`matched_by = auto`). At least one of the two must already be a `transfer`; two rows of unknown kind are never linked automatically.
 - Several candidates, or none → the row goes to the Review "Unmatched transfers" list, where a person links it or reclassifies it.
 - A transfer to/from somewhere the household doesn't track (e.g. money sent to a relative) is **not** a transfer. It's an expense or income with a category.
 - **Accounts without a CSV** (no `parser_key`: Cash, loans, value-only investments): marking a row as a transfer to one of them creates the matching leg there automatically (opposite amount, same date), linked as the transfer's other half. Undoing the original row removes the generated leg.
