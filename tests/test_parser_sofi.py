@@ -55,7 +55,7 @@ def test_bonus_is_unknown_money_in(rows):
     r = rows[6]
     assert (r.kind, r.amount_cents, r.balance_cents) == (None, -2500, 12500)
     assert r.raw_row == {
-        "Date": "11/1/2026", "Description": "Money Welcome Bonus", "Type": "BONUS",
+        "Date": "2026-11-01", "Description": "Money Welcome Bonus", "Type": "BONUS",
         "Amount": "25", "Current balance": "125", "Status": "Posted",
     }
 
@@ -63,9 +63,21 @@ def test_bonus_is_unknown_money_in(rows):
 def test_ambiguous_amounts_refused():
     with pytest.raises(ValueError, match="Line 2.*amount from the balance"):
         sofi.parse("Date,Description,Type,Amount,Current balance,Status\n"
-                   "11/1/2026,X,ACH,-1,000,000,Posted\n")
+                   "2026-11-01,X,ACH,-1,000,000,Posted\n")
 
 
 def test_bad_row_reports_line_number():
     with pytest.raises(ValueError, match="Line 2"):
         sofi.parse("Date,Description,Type,Amount,Current balance,Status\n13/45/2026,X,ACH,-1,5,Posted\n")
+
+
+def test_old_month_day_year_dates_still_read():
+    header = "Date,Description,Type,Amount,Current balance,Status\n"
+    [iso] = sofi.parse(header + "2026-11-13,X,ACH,-1,5,Posted\n")
+    [mdy] = sofi.parse(header + "11/13/2026,X,ACH,-1,5,Posted\n")
+    assert iso.txn_date == mdy.txn_date == date(2026, 11, 13)
+
+
+def test_bad_iso_date_reports_line_number():
+    with pytest.raises(ValueError, match="Line 2.*Not a date"):
+        sofi.parse("Date,Description,Type,Amount,Current balance,Status\n2026-13-45,X,ACH,-1,5,Posted\n")

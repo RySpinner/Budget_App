@@ -234,6 +234,9 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
 119. **The Review page lists links from the last 60 days** (in an expander under Unmatched transfers) with an Unlink button.
 120. **Matching uses `effective_date`** (the transaction date when there is one). Balances in phase 11a will use the posted date (#103); matching doesn't need to.
 
+### SoFi date format (2026-11-14)
+121. **SoFi dates are YYYY-MM-DD** (e.g. 2026-11-13), at the owner's request (2026-11-14). The parser still accepts M/D/YYYY, the format of the first sample, in case an export or an Excel-saved copy uses it. Both give the same fingerprint, so mixing them doesn't create duplicates.
+
 ### Not yet addressed
 30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
 

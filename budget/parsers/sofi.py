@@ -2,10 +2,12 @@
 
 The format (seen in a real export, as downloaded):
     Date,Description,Type,Amount,Current balance,Status
-    6/30/2026,FAKE MEMBERSHIP,DIRECT_PAY,-10,15,Posted
+    2026-06-30,FAKE MEMBERSHIP,DIRECT_PAY,-10,15,Posted
 
-- One date, M/D/YYYY (no leading zeros). Treated as the transaction date;
-  posted_date stays NULL. Rows are newest first.
+- One date, YYYY-MM-DD (e.g. 2026-11-13). Treated as the transaction date;
+  posted_date stays NULL. Rows are newest first. M/D/YYYY (e.g. 11/13/2026,
+  as in the first sample, or a copy saved from Excel) is accepted too; the
+  same day gives the same fingerprint either way.
 - SoFi's sign is the opposite of ours: money out is NEGATIVE, money in is
   positive. We flip it, so money out is positive.
 - Amounts can be whole dollars ("-10", "25"); parse_cents handles that.
@@ -34,7 +36,7 @@ The format (seen in a real export, as downloaded):
 import csv
 import io
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 from budget.money import parse_cents
 from budget.parsers.base import ParsedRow
@@ -52,6 +54,8 @@ SPECIAL_ROWS = [
 
 FIRST_PIECE = re.compile(r"^\s*-?\$?\s*\d{1,3}(\.\d+)?\s*$")     # "-1" of "-1,000.00"
 NEXT_PIECE = re.compile(r"^\d{3}(\.\d+)?\s*$")                  # "000.00" of "-1,000.00"
+
+DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y")     # SoFi's format first; then M/D/YYYY (older sample / Excel)
 
 
 def parse(text: str) -> list[ParsedRow]:
@@ -115,9 +119,18 @@ def _two_amounts(pieces: list[str]) -> tuple[str, str]:
     return ",".join(pieces[:i]), ",".join(pieces[i:])
 
 
+def _parse_date(text: str) -> date:
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(text.strip(), fmt).date()
+        except ValueError:
+            pass
+    raise ValueError(f"Not a date in YYYY-MM-DD (or M/D/YYYY) form: {text!r}")
+
+
 def _parse_row(fields: list[str]) -> ParsedRow:
     col = _columns(fields)
-    txn_date = datetime.strptime(col["Date"].strip(), "%m/%d/%Y").date()
+    txn_date = _parse_date(col["Date"])
     description = col["Description"].strip()
     if not description:
         raise ValueError("Row has no description")
