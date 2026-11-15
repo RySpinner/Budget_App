@@ -18,6 +18,11 @@ decisions to reassess are in DECISIONS.md.
 - [ ] **Bank samples** for each checking/savings institution: header row plus a debit purchase, a deposit/paycheck, a transfer to savings, a card payment, an ATM withdrawal, and the balance column if there is one (fake amounts are fine; copy from Notepad, not Excel).
 - [ ] **After pulling the rewards change:** run `python -m budget.migrate` (0007), then re-import your card CSVs. Past rewards credits get added (and wait in Review); everything else shows as a duplicate.
 - [ ] **After pulling phase 10:** run `python -m budget.migrate` (0008). Then on the Rules page press **Re-run all rules** once: it flags older ATM / Venmo / Zelle / check rows as "needs care" and links the card payments already in the database. What's left shows in Review → Unmatched transfers.
+- [ ] **After pulling phase 11a:** run `python -m budget.migrate` (0009). Then on the **Accounts** page, for each account:
+  - set an opening balance (for checking, "Use the bank's earliest balance" does it in one click);
+  - for each card, type in a recent statement balance;
+  - where the balance matches, press "Mark reconciled through".
+- [ ] **Review DECISIONS.md #122–131** (phase 11a as built).
 - [ ] **Review DECISIONS.md #108–120** (phase 10 as built).
 - [ ] **Review DECISIONS.md #101–107** (double-entry review: generated legs, equity entries, posted-date balances, reconciled-through, books-balance check).
 - [ ] **Decide:** rewards / cash-back credits as income or as negative expense (they'll be stored and wait in Review meanwhile); the transfer matching window (default 5 days); how much cash tracking is wanted; the income categories.
@@ -49,12 +54,12 @@ decisions to reassess are in DECISIONS.md.
   - [x] Part 2: transfer rules with an optional counterpart account (migration 0006); saving a transfer rule from Review; Rules page "Sets" / "Other account"
 - [x] Before phase 10: store currency rewards credits (kind unknown → Review) instead of excluding them; points-only rows stay excluded (migration 0007)
 - [x] Phase 10: transfer matching and Review tabs (unmatched transfers, needs care); generated legs for accounts without a CSV (migration 0008)
-- [ ] Phase 11a: reconciliation and Accounts page (posted-date balances, balance adjustments, reconciled-through dates)
+- [x] Phase 11a: reconciliation and Accounts page (posted-date balances, balance adjustments, reconciled-through dates; migration 0009)
 - [ ] Phase 11b: cash flow, net worth, books-balance check; Dashboard additions
 - [ ] Phase 12: PINNED special types: ATM/cash, Venmo/Zelle, checks; split lines to a category or an account; loan accounts
 - [ ] Phase 13: IOU ledger; optional history import
 - [ ] Phase 14 (future): investment accounts
-- [ ] Settings page for categories and people (accounts get their own page in phase 11).
+- [ ] Settings page for categories and people (accounts are edited on the Accounts page).
 - [ ] Pi firewall (`ufw`) step in docs/deploy.md (SPEC §9, recommended for v2).
 
 ## Small things noticed

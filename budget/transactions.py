@@ -25,7 +25,7 @@ from budget.transfers import auto_match, dissolve
 UNCATEGORIZED = -1        # category filter value: lines with no category
 TRANSFER = "transfer"     # "category" choice meaning: a transfer between our accounts
 UNKNOWN_KIND = "unknown"  # kind filter value: rows whose kind isn't known yet
-KINDS = ("expense", "income", "transfer", UNKNOWN_KIND)
+KINDS = ("expense", "income", "transfer", "adjustment", UNKNOWN_KIND)
 
 
 @dataclass
@@ -149,6 +149,14 @@ def ensure_not_generated(conn: psycopg.Connection, transaction_id: int) -> None:
                          "Change or unlink that row instead.")
 
 
+def ensure_not_adjustment(conn: psycopg.Connection, transaction_id: int) -> None:
+    """Balance adjustments (Accounts page) are never spending, income or transfers; they're deleted instead."""
+    row = conn.execute("SELECT kind FROM transactions WHERE id = %s", (transaction_id,)).fetchone()
+    if row and row[0] == "adjustment":
+        raise ValueError("This is a balance adjustment: it can't get a category or become a transfer. "
+                         "Delete it if it's wrong.")
+
+
 def update_line(
     conn: psycopg.Connection,
     transaction_id: int,
@@ -191,6 +199,7 @@ def update_line(
             elif category_id is not None:
                 if category_id != current_category or current_kind == "transfer":
                     ensure_not_generated(conn, transaction_id)
+                    ensure_not_adjustment(conn, transaction_id)
                     _dissolve_transfer(conn, transaction_id)
                     conn.execute(
                         """UPDATE transactions
@@ -218,6 +227,7 @@ def mark_as_transfer(conn: psycopg.Connection, transaction_id: int) -> None:
     exactly one candidate; otherwise it waits in Review (Unmatched transfers).
     """
     with conn.transaction():
+        ensure_not_adjustment(conn, transaction_id)
         if conn.execute("SELECT 1 FROM splits WHERE transaction_id = %s", (transaction_id,)).fetchone():
             raise ValueError("Remove the split before marking this as a transfer")
         conn.execute(

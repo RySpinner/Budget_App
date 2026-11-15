@@ -46,7 +46,7 @@ def flag_existing(conn: psycopg.Connection) -> int:
           FROM transactions t
          WHERE needs_care IS NULL
            AND category_id IS NULL
-           AND kind IS DISTINCT FROM 'transfer'
+           AND (kind IS NULL OR kind IN ('expense', 'income'))
            AND kind_source IS DISTINCT FROM 'manual'
            AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)
         """

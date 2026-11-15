@@ -80,6 +80,7 @@ def candidates(conn: psycopg.Connection, transaction_id: int, *, manual: bool = 
          WHERE t.id = %(id)s
            AND o.transfer_id IS NULL
            AND o.generated_from_id IS NULL
+           AND o.kind IS DISTINCT FROM 'adjustment'
            AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = o.id)
            {"" if manual else auto_only}
          ORDER BY abs(o.effective_date - t.effective_date), o.id
@@ -160,6 +161,8 @@ def _check_linkable(leg: dict) -> None:
         raise ValueError(f"Transaction {leg['id']} is split; remove the split before linking it")
     if leg["generated_from_id"] is not None:
         raise ValueError(f"Transaction {leg['id']} was created as the other half of a transfer")
+    if leg["kind"] == "adjustment":
+        raise ValueError(f"Transaction {leg['id']} is a balance adjustment, not a transfer")
 
 
 def _make_transfer_leg(conn: psycopg.Connection, leg: dict, transfer_id: int, kind_source: str) -> None:

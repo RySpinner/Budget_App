@@ -31,7 +31,7 @@ import psycopg
 
 from budget.needs_care import flag_existing
 from budget.parsers.base import REWARDS_CREDIT
-from budget.transactions import ensure_not_generated, mark_as_transfer
+from budget.transactions import ensure_not_adjustment, ensure_not_generated, mark_as_transfer
 from budget.transfers import auto_match, dissolve
 
 MATCH_TYPES = ("contains", "exact", "regex")
@@ -157,6 +157,7 @@ def apply_rules(conn: psycopg.Connection, transaction_ids: list[int] | None = No
          WHERE t.category_source IS DISTINCT FROM 'manual'
            AND t.transfer_id IS NULL
            AND t.needs_care IS NULL
+           AND t.kind IS DISTINCT FROM 'adjustment'
            AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)
     """
     params: tuple = ()
@@ -277,7 +278,7 @@ def rerun_for_review_queue(conn: psycopg.Connection) -> ApplyResult:
     ids = [
         r[0] for r in conn.execute(
             """SELECT id FROM transactions t WHERE category_id IS NULL
-               AND kind IS DISTINCT FROM 'transfer'
+               AND (kind IS NULL OR kind IN ('expense', 'income'))
                AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)"""
         )
     ]
@@ -298,6 +299,7 @@ def categorize_manually(
     """
     with conn.transaction():
         ensure_not_generated(conn, transaction_id)
+        ensure_not_adjustment(conn, transaction_id)
         dissolve(conn, conn.execute("SELECT transfer_id FROM transactions WHERE id = %s",
                                     (transaction_id,)).fetchone()[0])
         conn.execute(

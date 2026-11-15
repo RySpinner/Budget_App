@@ -80,6 +80,8 @@ def describe(kind: str | None, amount_cents: int, reason: str | None = None) -> 
         return f"excluded: {reason}"
     if kind == "transfer":
         return f"transfer ({reason})" if reason else "transfer"
+    if kind == "adjustment":
+        return "balance adjustment"
     if kind is None and reason:
         return f"needs review ({reason})"
     return kind or "needs review"

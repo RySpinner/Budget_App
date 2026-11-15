@@ -1,7 +1,7 @@
 """Transactions page: filter, edit, split, and add manual (cash) entries.
 
 Shows spending by default; the Kind filter switches to income, transfers,
-rows whose kind isn't known yet, or everything. Choosing one top-level
+balance adjustments, rows whose kind isn't known yet, or everything. Choosing one top-level
 category gives the old per-sheet layout: date, amount, running monthly
 total, merchant, account, budget-to-date, note, purchaser. Running totals and
 budget-to-date are computed for display only.
@@ -12,6 +12,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from budget.balances import reconciled_through_if_affected
 from budget.categories import subcategory_choices
 from budget.db import connect
 from budget.money import format_cents, format_plain, parse_cents
@@ -24,7 +25,7 @@ from budget.transactions import (
 
 TRANSFER_LABEL = "↔ Transfer between our accounts"
 KIND_LABELS = {"expense": "Spending", "income": "Income", "transfer": "Transfers",
-               UNKNOWN_KIND: "Kind not known yet", None: "Everything"}
+               "adjustment": "Balance adjustments", UNKNOWN_KIND: "Kind not known yet", None: "Everything"}
 
 state = st.session_state
 state.setdefault("txn_round", 0)     # bump to reset editors after saving
@@ -118,7 +119,11 @@ if account_id is not None or purchaser_id is not None or sub_id is not None:
                "filters they cover only those rows.")
 if kind == "transfer":
     st.caption("Transfers move money between your own accounts (e.g. a card payment) and never count as "
-               "spending. Linking each to the other account's side comes in a later phase.")
+               "spending. Ones not yet linked to the other account's side wait in Review, under Unmatched "
+               "transfers.")
+if kind == "adjustment":
+    st.caption("Balance adjustments are made on the Accounts page to close a difference with the bank. They "
+               "change the account's balance but never count as spending or income.")
 
 # ---------------------------------------------------------------------------
 # Editable table
@@ -218,16 +223,20 @@ txn_id = st.selectbox(
 if txn_id is not None:
     with connect() as conn:
         txn = conn.execute(
-            "SELECT amount_cents, category_id, source, raw_description, kind FROM transactions WHERE id = %s",
+            "SELECT amount_cents, category_id, source, raw_description, kind, account_id, balance_date "
+            "FROM transactions WHERE id = %s",
             (txn_id,),
         ).fetchone()
+        txn_reconciled = reconciled_through_if_affected(conn, txn[5], txn[6])
         existing = get_splits(conn, txn_id)
         txn_kind = txn[4]
         same_kind_labels = list(subcategory_choices(conn, kind=txn_kind).values()) if txn_kind in ("expense", "income") else []
-    amount_cents, parent_category, source, raw, _ = txn
+    amount_cents, parent_category, source, raw = txn[:4]
     st.write(md(f"**{format_cents(amount_cents)}** · {raw}"))
 
-if txn_id is not None and txn_kind not in ("expense", "income"):
+if txn_id is not None and txn_kind == "adjustment":
+    st.info("A balance adjustment can't be split or categorized. Delete it below if it's wrong.")
+elif txn_id is not None and txn_kind not in ("expense", "income"):
     st.info("Only spending or income can be split. Give this row a category first "
             "(transfers move money between your accounts and are never split).")
 elif txn_id is not None:
@@ -298,6 +307,10 @@ elif txn_id is not None:
 
 if txn_id is not None and source == "manual":
     st.markdown("**Delete this manual entry**")
+    if txn_reconciled:
+        st.warning(md(f"This account is reconciled through {txn_reconciled:%b} {txn_reconciled.day}, "
+                      f"{txn_reconciled:%Y}, and this entry is on or before that day. Deleting it changes a "
+                      "balance that already matched the bank; the Accounts page will show the difference."))
     sure = st.checkbox("Yes, delete it", key=f"confirm_delete_{txn_id}")
     if st.button("Delete", disabled=not sure):
         with connect() as conn:
@@ -337,6 +350,12 @@ with st.expander("Add a cash / manual entry"):
                         account_id=entry_account,
                     )
                 state.txn_flash = f"Added {description.strip()} ({format_cents(parse_cents(amount_text))})."
+                with connect() as conn:
+                    through = reconciled_through_if_affected(conn, entry_account, entry_date)
+                if through:
+                    state.txn_flash += (f" Note: {accounts[entry_account]} was reconciled through "
+                                        f"{through:%b} {through.day}, {through:%Y}, so its balance on that day "
+                                        "has changed; check the Accounts page.")
                 state.txn_round += 1
                 st.rerun()
             except ValueError as e:

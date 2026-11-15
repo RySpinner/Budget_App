@@ -237,8 +237,37 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
 ### SoFi date format (2026-11-14)
 121. **SoFi dates are YYYY-MM-DD** (e.g. 2026-11-13), at the owner's request (2026-11-14). The parser still accepts M/D/YYYY, the format of the first sample, in case an export or an Excel-saved copy uses it. Both give the same fingerprint, so mixing them doesn't create duplicates.
 
+### Phase 11a as built: reconciliation and the Accounts page (2026-11-15)
+122. **A row counts toward its account's balance on `balance_date`:** the posted date if the bank gave one, else the transaction date (a generated column, migration 0009). Budgets and spending keep using `effective_date`.
+123. **The opening balance is the balance at the end of its date,** like a bank-stated balance:
+    - rows on or before that day are already included in it;
+    - with no opening balance, the account starts at $0 before its first row;
+    - asking for a balance before the opening date gives "unknown".
+124. **Balances are shown in each account's own terms,** both as positive numbers: money *held* for checking, savings and cash; money *owed* for credit cards. Transaction amounts elsewhere keep the database sign (#87 is still open for those).
+125. **Difference = bank's balance − computed balance**, on the bank's date. The "latest" bank balance is the most recent date; if one day has several, a statement wins over a typed-in balance, which wins over an imported one.
+126. **Balance adjustments** are a new transaction kind, `adjustment`:
+    - entered by hand on the Accounts page, dated on the bank balance's day, with an optional note;
+    - described as "Balance adjustment", with the account owner as purchaser;
+    - never spending, income or a transfer, so they're kept out of Review, rules and transfer matching;
+    - can't be categorized or split, only deleted (Transactions page, Kind → Balance adjustments);
+    - must be dated after the opening balance date.
+    - **Not offered while the account has no opening balance**, since the difference then usually just means the account didn't start at $0.
+127. **"Reconciled through" can only be set on a day whose bank balance matches.** It doesn't lock anything; it adds warnings:
+    - undoing an import asks first and says how many of its rows fall in the reconciled period;
+    - deleting a manual entry in that period warns before the Delete button;
+    - adding a manual entry in that period warns afterwards, in the confirmation message (the entry form has no confirm step);
+    - category, note and purchaser edits don't warn, because they don't change balances;
+    - the Accounts page flags "⚠ Changed since reconciled" when the balance on that day no longer matches.
+128. **Accounts can be added and edited on the Accounts page:**
+    - types offered are checking, savings, cash and credit card (brokerage, retirement and loan come later);
+    - once an account has transactions it can't switch between an asset type and a credit card;
+    - there's no delete, only "Active" off.
+129. **A shortcut sets the opening balance from the bank's earliest stated balance** (e.g. the first day of an imported checking file). With the BCU fake data, every later day then matched the bank's own running balance.
+130. **Credit cards reconcile against statement balances typed in by hand,** since no card export seen so far has a balance column (#90).
+131. **Reconciliation warnings on the Dashboard are left for phase 11b,** with net worth and cash flow.
+
 ### Not yet addressed
-30. **Categories, cards and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned.
+30. **Categories and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned. (Accounts can be edited on the Accounts page since phase 11a.)
 
 ---
 

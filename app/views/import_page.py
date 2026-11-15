@@ -7,6 +7,7 @@ the page. Nothing is written to the database until "Import" is clicked.
 import pandas as pd
 import streamlit as st
 
+from budget.balances import reconciled_rows_in_batch
 from budget.categories import subcategory_choices
 from app.ui import md
 from budget.db import connect
@@ -221,11 +222,18 @@ else:
 
     if state.confirm_undo is not None:
         batch_id = state.confirm_undo
-        st.warning(md(
+        with connect() as conn:
+            reconciled_count, reconciled_day = reconciled_rows_in_batch(conn, batch_id)
+        warning = (
             f"Undo batch {batch_id}? This deletes every transaction it added, including any "
             "categories, notes or splits you have set on them since. The archived CSV is kept, "
             "so the file can be imported again."
-        ))
+        )
+        if reconciled_count:
+            warning += (f" **{reconciled_count} of its rows are in a reconciled period** (through "
+                        f"{reconciled_day:%b} {reconciled_day.day}, {reconciled_day:%Y}): balances that matched "
+                        "the bank will change.")
+        st.warning(md(warning))
         yes, no, _ = st.columns([1, 1, 4])
         if yes.button("Yes, undo it", type="primary"):
             with connect() as conn:

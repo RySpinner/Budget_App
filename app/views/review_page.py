@@ -73,7 +73,7 @@ with connect() as conn:
           FROM transactions t
           JOIN accounts a ON a.id = t.account_id
          WHERE t.category_id IS NULL
-           AND t.kind IS DISTINCT FROM 'transfer'   -- transfers have no category: see Unmatched transfers
+           AND (t.kind IS NULL OR t.kind IN ('expense', 'income'))  -- transfers: Unmatched transfers tab
            AND t.needs_care IS NULL                 -- see Needs care
            AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)  -- split lines carry the categories
          ORDER BY t.effective_date DESC, t.id
@@ -87,7 +87,7 @@ with connect() as conn:
           JOIN accounts a ON a.id = t.account_id
          WHERE t.needs_care IS NOT NULL
            AND t.category_id IS NULL
-           AND t.kind IS DISTINCT FROM 'transfer'
+           AND (t.kind IS NULL OR t.kind IN ('expense', 'income'))
            AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)
          ORDER BY t.effective_date DESC, t.id
         """

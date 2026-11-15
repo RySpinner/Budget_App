@@ -24,7 +24,8 @@ pages = [
     st.Page("views/review_page.py", title="Review", icon=":material/checklist:", url_path="review"),
     st.Page("views/transactions_page.py", title="Transactions", icon=":material/receipt_long:", url_path="transactions"),
     st.Page("views/budgets_page.py", title="Budgets", icon=":material/savings:", url_path="budgets"),
+    st.Page("views/accounts_page.py", title="Accounts", icon=":material/account_balance:", url_path="accounts"),
     st.Page("views/rules_page.py", title="Rules", icon=":material/rule:", url_path="rules"),
-    # A Settings page (categories, cards, people) has no phase yet; see TODO.md.
+    # A Settings page (categories, people) has no phase yet; see TODO.md.
 ]
 st.navigation(pages).run()
