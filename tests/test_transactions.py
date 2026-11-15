@@ -230,3 +230,12 @@ def test_manual_income_entry(conn, basics):
                      purchaser_id=basics["person"], category_id=basics["income"], account_id=basics["checking"])
     assert conn.execute("SELECT kind, account_id FROM transactions WHERE id = %s", (tid,)).fetchone() == (
         "income", basics["checking"])
+
+
+def test_manual_amount_cents_follows_what_people_type():
+    from budget.transactions import manual_amount_cents
+    assert manual_amount_cents(1234, "expense") == 1234     # spent $12.34: money out
+    assert manual_amount_cents(-500, "expense") == -500     # a refund
+    assert manual_amount_cents(1234, None) == 1234          # no category yet: treated as spending
+    assert manual_amount_cents(500, "income") == -500       # $5 interest received: money in
+    assert manual_amount_cents(-500, "income") == 500       # income taken back

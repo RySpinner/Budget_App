@@ -292,6 +292,13 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
     - net worth is a single line starting from $0;
     - both have a table view and hover tooltips.
 
+### Fix: manual income entries (2026-11-15)
+138. **The manual-entry form takes amounts the way you'd say them.**
+    - For an income category, "5.00" now means $5 received and is stored as −500 (money in).
+    - Before this fix it was stored as +500, i.e. $5 *out*. So interest typed into a hand-entered savings account lowered its balance, off by twice the amount, and showed as negative income.
+    - Spending, or no category, is unchanged: stored as typed, with a minus sign for a refund.
+    - The conversion is `transactions.manual_amount_cents`. `add_manual` itself keeps the database sign.
+
 ### Not yet addressed
 30. **Categories and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned. (Accounts can be edited on the Accounts page since phase 11a.)
 

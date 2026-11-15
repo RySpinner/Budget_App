@@ -64,3 +64,33 @@ def test_bad_manual_amount_shows_error(app):
     form_inputs["Description"].input("Bad")
     next(b for b in app.button if b.label == "Add entry").click().run()
     assert "fractions of a cent" in app.error[0].value
+
+
+def test_manual_income_entry_is_money_in(db, monkeypatch):
+    """Interest typed as 5.00 into an account with no CSV adds $5 to its balance (it used to subtract it)."""
+    from datetime import date
+
+    from budget.balances import balance_on, set_opening_balance
+
+    with psycopg.connect(db) as conn:
+        person = conn.execute("SELECT id FROM people WHERE name = 'Pat'").fetchone()[0]
+        savings = conn.execute(
+            "INSERT INTO accounts (account_class, account_type, display_name, institution, owner_person_id) "
+            "VALUES ('asset', 'savings', 'Test savings', 'Fake', %s) RETURNING id", (person,),
+        ).fetchone()[0]
+        set_opening_balance(conn, savings, 100000, date(2026, 10, 31))
+    monkeypatch.setenv("BUDGET_DATABASE_URL", db)
+    app = AppTest.from_file(PAGE, default_timeout=10).run()
+    form_inputs = {t.label: t for t in app.text_input}
+    form_inputs["Amount"].input("5.00")
+    form_inputs["Description"].input("Fake interest")
+    next(s for s in app.selectbox if s.label == "Category" and "Income › Interest" in s.options
+         ).select("Income › Interest")
+    next(s for s in app.selectbox if s.label == "Account" and "All accounts" not in s.options).select(savings)
+    app.date_input[0].set_value(date(2026, 11, 10))
+    next(b for b in app.button if b.label == "Add entry").click().run()
+    assert not app.exception
+    with psycopg.connect(db) as conn:
+        assert conn.execute("SELECT kind, amount_cents FROM transactions WHERE raw_description = 'Fake interest'"
+                            ).fetchone() == ("income", -500)
+        assert balance_on(conn, savings, date(2026, 11, 30)) == 100500

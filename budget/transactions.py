@@ -284,6 +284,19 @@ def get_splits(conn: psycopg.Connection, transaction_id: int) -> list[SplitLine]
     return [SplitLine(*r) for r in rows]
 
 
+def manual_amount_cents(typed_cents: int, category_kind: str | None) -> int:
+    """Turn an amount typed into the manual-entry form into the stored amount.
+
+    People type amounts the way they'd say them: "5.00" of interest received,
+    "12.34" spent at a market. The database stores money *out* as positive
+    and money *in* as negative (SPEC section 3), so:
+      - spending, or no category yet: stored as typed (a minus sign = a refund);
+      - income: the sign flips, so a typed 5.00 is $5 coming in (a minus sign =
+        income taken back, e.g. reversed interest).
+    """
+    return -typed_cents if category_kind == "income" else typed_cents
+
+
 def add_manual(
     conn: psycopg.Connection,
     *,
@@ -296,6 +309,9 @@ def add_manual(
     account_id: int | None = None,
 ) -> int:
     """Record something with no export (usually cash spending). Returns the new transaction id.
+
+    amount_cents uses the database sign convention (positive = money out).
+    The manual-entry form converts what people type with manual_amount_cents.
 
     Goes in the Cash account unless another account is given. The kind comes
     from the category; without one it is recorded as an expense awaiting a
