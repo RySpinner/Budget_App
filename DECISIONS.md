@@ -298,6 +298,15 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
     - A sign flip for income categories was added and then reverted the same day. The owner was already entering income as negative, so flipping would have broken that.
     - Making money in read as positive everywhere is the still-open display question (#87).
 139. **The Accounts page now says how many transactions are dated on or before the opening balance date.** Those rows don't change the balance, since the opening balance (end of that day) already includes them, and nothing used to point that out. This came up when hand-entered interest in a savings account with no CSV seemed "not counted".
+140. **Manual entries can be edited** (Transactions page: choose the row, then "Edit this manual entry"): date, amount, description and account. Category, note and purchaser stay in the table, as for any row.
+    - Imported rows can't be edited; they keep what the bank says.
+    - Not editable here either: rows the app created as a transfer's other side (change the original) and balance adjustments (delete and re-add on the Accounts page).
+    - Changing the amount of a split entry needs the split removed first. Date, description and account can still change.
+    - **Transfer entries:**
+      - changing the amount or account undoes the link first, since the two sides would no longer cancel out;
+      - the matcher then runs after any edit to a transfer entry, so it re-links (or newly links) when the other side is clear, and the confirmation says which happened;
+      - a row the app created for the transfer moves to the new date with it.
+    - Editing in a reconciled period gives the same after-the-fact warning as adding an entry.
 
 ### Not yet addressed
 30. **Categories and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned. (Accounts can be edited on the Accounts page since phase 11a.)

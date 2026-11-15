@@ -328,6 +328,80 @@ def add_manual(
         ).fetchone()[0]
 
 
+def update_manual(
+    conn: psycopg.Connection,
+    transaction_id: int,
+    *,
+    txn_date: date,
+    amount_cents: int,
+    description: str,
+    account_id: int,
+) -> list[str]:
+    """Change a manual entry's date, amount, description or account (e.g. entered in the wrong account).
+
+    Category, note and purchaser are edited in the Transactions table as for
+    any row. Imported rows keep the bank's values and can't be changed here.
+    Same sign as add_manual: positive = money out, negative = money in.
+
+    If the entry is one side of a transfer and its amount or account changes,
+    the link is undone first (the two sides would no longer cancel out); the
+    matcher then re-links it if its other side is clear. A row the app
+    created for that transfer moves to the new date along with it.
+    Returns notes worth showing the person.
+    """
+    description = description.strip()
+    if not description:
+        raise ValueError("Description can't be empty")
+    if amount_cents == 0:
+        raise ValueError("Amount can't be zero")
+    notes = []
+    with conn.transaction():
+        row = conn.execute(
+            "SELECT source, txn_date, amount_cents, account_id, transfer_id, kind FROM transactions WHERE id = %s",
+            (transaction_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"No transaction {transaction_id}")
+        source, old_date, old_amount, old_account, transfer_id, kind = row
+        if source != "manual":
+            raise ValueError("Only manual entries can be edited here; imported rows keep what the bank says")
+        ensure_not_generated(conn, transaction_id)
+        if kind == "adjustment":
+            raise ValueError("Balance adjustments can't be edited; delete it and add a new one on the Accounts page")
+        if not conn.execute("SELECT 1 FROM accounts WHERE id = %s", (account_id,)).fetchone():
+            raise ValueError(f"No account {account_id}")
+        amount_changed = amount_cents != old_amount
+        if amount_changed and conn.execute("SELECT 1 FROM splits WHERE transaction_id = %s",
+                                           (transaction_id,)).fetchone():
+            raise ValueError("This entry is split; remove the split before changing its amount")
+
+        relink = transfer_id is not None and (amount_changed or account_id != old_account)
+        if relink:
+            dissolve(conn, transfer_id)
+        conn.execute(
+            """UPDATE transactions
+                  SET txn_date = %s, amount_cents = %s, raw_description = %s, merchant = %s, account_id = %s
+                WHERE id = %s""",
+            (txn_date, amount_cents, description, description, account_id, transaction_id),
+        )
+        if txn_date != old_date:
+            # A leg the app created for this transfer stays on the same day.
+            conn.execute("UPDATE transactions SET txn_date = %s WHERE generated_from_id = %s",
+                         (txn_date, transaction_id))
+        if kind == "transfer":
+            # The new amount, account or date may now have exactly one partner (or a new one).
+            auto_match(conn)
+            linked = conn.execute("SELECT transfer_id IS NOT NULL FROM transactions WHERE id = %s",
+                                  (transaction_id,)).fetchone()[0]
+            if relink:
+                notes.append("Its transfer link was undone because the amount or account changed. "
+                             + ("It was linked again automatically." if linked else
+                                "Link it again in Review, under Unmatched transfers."))
+            elif linked and transfer_id is None:
+                notes.append("It was linked to its transfer's other side automatically.")
+    return notes
+
+
 def delete_manual(conn: psycopg.Connection, transaction_id: int) -> None:
     """Delete a manual entry. Imported rows are removed by undoing their import instead."""
     with conn.transaction():

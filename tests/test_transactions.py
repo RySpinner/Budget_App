@@ -231,3 +231,101 @@ def test_manual_income_entry(conn, basics):
     assert conn.execute("SELECT kind, account_id FROM transactions WHERE id = %s", (tid,)).fetchone() == (
         "income", basics["checking"])
 
+
+
+# ---- editing manual entries ----------------------------------------------------
+
+def _savings(conn, basics):
+    return conn.execute(
+        "INSERT INTO accounts (display_name, institution, owner_person_id, account_class, account_type) "
+        "VALUES ('Hand savings', 'Fake', %s, 'asset', 'savings') RETURNING id", (basics["person"],),
+    ).fetchone()[0]
+
+
+def test_update_manual_moves_entry_to_another_account(conn, basics):
+    from datetime import date
+
+    from budget.balances import balance_on
+    from budget.transactions import add_manual, update_manual
+    savings = _savings(conn, basics)
+    cash = conn.execute("SELECT id FROM accounts WHERE account_type = 'cash'").fetchone()[0]
+    tid = add_manual(conn, txn_date=date(2026, 11, 10), amount_cents=-500, description="Interst",
+                     purchaser_id=basics["person"], category_id=basics["income"])    # oops: went into Cash
+    assert balance_on(conn, savings, date(2026, 11, 30)) == 0
+    notes = update_manual(conn, tid, txn_date=date(2026, 11, 9), amount_cents=-510, description=" Interest ",
+                          account_id=savings)
+    assert notes == []
+    row = conn.execute("SELECT account_id, txn_date::text, amount_cents, raw_description, merchant, kind, "
+                       "category_id FROM transactions WHERE id = %s", (tid,)).fetchone()
+    assert row == (savings, "2026-11-09", -510, "Interest", "Interest", "income", basics["income"])
+    assert balance_on(conn, savings, date(2026, 11, 30)) == 510
+    assert balance_on(conn, cash, date(2026, 11, 30)) == 0
+
+
+def test_update_manual_refusals(conn, basics, add_card_txn):
+    from datetime import date
+
+    import pytest
+
+    from budget.balances import add_adjustment
+    from budget.transactions import SplitLine, add_manual, set_splits, update_manual
+    from budget.transfers import generate_leg
+    savings = _savings(conn, basics)
+    kw = dict(txn_date=date(2026, 11, 1), amount_cents=100, description="X", account_id=savings)
+    with pytest.raises(ValueError, match="imported rows"):
+        update_manual(conn, add_card_txn(), **kw)
+    adj = add_adjustment(conn, savings, date(2026, 11, 2), 100)
+    with pytest.raises(ValueError, match="Balance adjustments"):
+        update_manual(conn, adj, **kw)
+    leg = add_card_txn(account_id=basics["card"], amount_cents=-2000, kind="transfer")
+    generated = generate_leg(conn, leg, savings)
+    with pytest.raises(ValueError, match="other half of a transfer"):
+        update_manual(conn, generated, **kw)
+    split = add_manual(conn, txn_date=date(2026, 11, 1), amount_cents=3000, description="Shop",
+                       purchaser_id=basics["person"], category_id=basics["sub"])
+    set_splits(conn, split, [SplitLine(2000, basics["sub"]), SplitLine(1000, basics["sub2"])])
+    with pytest.raises(ValueError, match="remove the split"):
+        update_manual(conn, split, txn_date=date(2026, 11, 3), amount_cents=3100, description="Shop",
+                      account_id=savings)
+    # Date, description and account can still change on a split entry.
+    update_manual(conn, split, txn_date=date(2026, 11, 3), amount_cents=3000, description="Shop 2",
+                  account_id=savings)
+
+
+def test_update_manual_transfer_leg(conn, basics, add_card_txn):
+    from datetime import date
+
+    from budget.transactions import add_manual, mark_as_transfer, update_manual
+    from budget.transfers import generate_leg
+    savings = _savings(conn, basics)
+    # A hand-entered savings withdrawal linked to the card payment it paid for.
+    card_leg = add_card_txn(account_id=basics["card"], amount_cents=-2000, kind="transfer",
+                            txn_date="2026-11-05", posted_date=None)
+    manual = add_manual(conn, txn_date=date(2026, 11, 5), amount_cents=2000, description="To card",
+                        purchaser_id=basics["person"], account_id=savings)
+    mark_as_transfer(conn, manual)                      # links automatically: one candidate each way
+    assert conn.execute("SELECT transfer_id FROM transactions WHERE id = %s", (manual,)).fetchone()[0]
+
+    # A date-only change keeps the link.
+    assert update_manual(conn, manual, txn_date=date(2026, 11, 6), amount_cents=2000, description="To card",
+                         account_id=savings) == []
+    # A new amount can't cancel out the card's leg: the link is undone, and nothing matches now.
+    notes = update_manual(conn, manual, txn_date=date(2026, 11, 6), amount_cents=2500, description="To card",
+                          account_id=savings)
+    assert "Link it again in Review" in notes[0]
+    assert conn.execute("SELECT count(*) FROM transfers").fetchone()[0] == 0
+    # Back to the right amount: linked to the card's leg again automatically.
+    notes = update_manual(conn, manual, txn_date=date(2026, 11, 6), amount_cents=2000, description="To card",
+                          account_id=savings)
+    assert notes == ["It was linked to its transfer's other side automatically."]
+    assert conn.execute("SELECT transfer_id FROM transactions WHERE id = %s", (card_leg,)).fetchone()[0] is not None
+
+    # A generated leg follows its original's date.
+    cash_out = add_manual(conn, txn_date=date(2026, 11, 7), amount_cents=4000, description="Moved to savings",
+                          purchaser_id=basics["person"])
+    mark_as_transfer(conn, cash_out)
+    generated = generate_leg(conn, cash_out, savings)
+    update_manual(conn, cash_out, txn_date=date(2026, 11, 8), amount_cents=4000, description="Moved to savings",
+                  account_id=conn.execute("SELECT id FROM accounts WHERE account_type = 'cash'").fetchone()[0])
+    assert conn.execute("SELECT txn_date::text FROM transactions WHERE id = %s", (generated,)).fetchone()[0] \
+        == "2026-11-08"

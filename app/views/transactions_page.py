@@ -20,7 +20,7 @@ from app.ui import md
 from budget.parsers.base import describe
 from budget.transactions import (
     TRANSFER, UNCATEGORIZED, UNKNOWN_KIND, Filters, SplitLine, add_manual, cash_account_id, delete_manual,
-    get_splits, load_lines, months_with_data, set_splits, update_line,
+    get_splits, load_lines, months_with_data, set_splits, update_line, update_manual,
 )
 
 TRANSFER_LABEL = "↔ Transfer between our accounts"
@@ -223,8 +223,8 @@ txn_id = st.selectbox(
 if txn_id is not None:
     with connect() as conn:
         txn = conn.execute(
-            "SELECT amount_cents, category_id, source, raw_description, kind, account_id, balance_date "
-            "FROM transactions WHERE id = %s",
+            "SELECT amount_cents, category_id, source, raw_description, kind, account_id, balance_date, "
+            "generated_from_id FROM transactions WHERE id = %s",
             (txn_id,),
         ).fetchone()
         txn_reconciled = reconciled_through_if_affected(conn, txn[5], txn[6])
@@ -305,7 +305,43 @@ elif txn_id is not None:
         state.txn_round += 1
         st.rerun()
 
-if txn_id is not None and source == "manual":
+AMOUNT_HELP = ("Same sign as the amounts in the table above: money out (spending) is positive; use a minus "
+               "sign for money in, e.g. -5.00 for interest received, or a refund.")
+
+if txn_id is not None and source == "manual" and txn[7] is not None:
+    st.info("This row was created as the other side of a transfer. Change, unlink or delete the original "
+            "row instead, and this one follows.")
+elif txn_id is not None and source == "manual" and txn_kind != "adjustment":
+    st.markdown("**Edit this manual entry**")
+    st.caption("For the date, amount, description or account (e.g. entered in the wrong account). Category, note "
+               "and purchaser are edited in the table above.")
+    with st.form(f"edit_manual_{txn_id}_{state.txn_round}"):
+        account_ids = list(accounts)
+        e1, e2 = st.columns(2)
+        new_date = e1.date_input("Date", value=txn[6], key=f"edit_date_{txn_id}")
+        new_amount = e2.text_input("Amount", value=format_plain(amount_cents), help=AMOUNT_HELP,
+                                   key=f"edit_amount_{txn_id}")
+        e3, e4 = st.columns(2)
+        new_description = e3.text_input("Description", value=raw, key=f"edit_description_{txn_id}")
+        new_account = e4.selectbox("Account", account_ids, index=account_ids.index(txn[5]),
+                                   format_func=accounts.get, key=f"edit_account_{txn_id}")
+        if st.form_submit_button("Save changes"):
+            try:
+                with connect() as conn:
+                    notes = update_manual(conn, txn_id, txn_date=new_date, amount_cents=parse_cents(new_amount),
+                                          description=new_description, account_id=new_account)
+                    touched = [d for d in (reconciled_through_if_affected(conn, txn[5], txn[6]),
+                                           reconciled_through_if_affected(conn, new_account, new_date)) if d]
+                state.txn_flash = " ".join([f"Saved {new_description.strip()}."] + notes)
+                if touched:
+                    state.txn_flash += (" Note: this changes a balance in a reconciled period; check the "
+                                        "Accounts page.")
+                state.txn_round += 1
+                st.rerun()
+            except ValueError as e:
+                st.error(md(e))
+
+if txn_id is not None and source == "manual" and txn[7] is None:
     st.markdown("**Delete this manual entry**")
     if txn_reconciled:
         st.warning(md(f"This account is reconciled through {txn_reconciled:%b} {txn_reconciled.day}, "
@@ -326,10 +362,7 @@ with st.expander("Add a manual entry (cash spending, interest, anything without 
     with st.form("manual_entry", clear_on_submit=True):
         f1, f2 = st.columns(2)
         entry_date = f1.date_input("Date", value=today)
-        amount_text = f2.text_input(
-            "Amount", placeholder="12.34",
-            help="Same sign as the amounts in the table above: money out (spending) is positive; use a minus "
-                 "sign for money in, e.g. -5.00 for interest received, or a refund.")
+        amount_text = f2.text_input("Amount", placeholder="12.34", help=AMOUNT_HELP)
         description = st.text_input("Description", placeholder="e.g. Farmers market")
         f3, f4, f5 = st.columns(3)
         category_label = f3.selectbox("Category", list(categories.values()), index=None,

@@ -94,3 +94,34 @@ def test_manual_income_entry_is_money_in(db, monkeypatch):
         assert conn.execute("SELECT kind, amount_cents FROM transactions WHERE raw_description = 'Fake interest'"
                             ).fetchone() == ("income", -500)
         assert balance_on(conn, savings, date(2026, 11, 30)) == 100500
+
+
+def test_edit_manual_entry_account(db, monkeypatch):
+    """A manual entry made in the wrong account can be moved with the edit form."""
+    from datetime import date
+
+    with psycopg.connect(db) as conn:
+        person = conn.execute("SELECT id FROM people WHERE name = 'Pat'").fetchone()[0]
+        cash = conn.execute("SELECT id FROM accounts WHERE account_type = 'cash'").fetchone()[0]
+        moved_to = conn.execute(
+            "INSERT INTO accounts (account_class, account_type, display_name, institution, owner_person_id) "
+            "VALUES ('asset', 'savings', 'Edit target', 'Fake', %s) RETURNING id", (person,),
+        ).fetchone()[0]
+        tid = conn.execute(
+            "INSERT INTO transactions (source, account_id, txn_date, amount_cents, raw_description, merchant, "
+            "kind, kind_source, purchaser_id) VALUES ('manual', %s, %s, 700, 'Wrong place', 'Wrong place', "
+            "'expense', 'manual', %s) RETURNING id", (cash, date.today(), person),
+        ).fetchone()[0]
+    monkeypatch.setenv("BUDGET_DATABASE_URL", db)
+    app = AppTest.from_file(PAGE, default_timeout=10).run()
+    picker = next(s for s in app.selectbox if s.label == "Transaction (from the rows above)")
+    picker.select(tid).run()
+    assert not app.exception
+    app.selectbox(key=f"edit_account_{tid}").select(moved_to)
+    app.text_input(key=f"edit_amount_{tid}").input("7.25")
+    next(b for b in app.button if b.label == "Save changes").click().run()
+    assert not app.exception
+    assert "Saved Wrong place." in app.success[0].value
+    with psycopg.connect(db) as conn:
+        assert conn.execute("SELECT account_id, amount_cents FROM transactions WHERE id = %s", (tid,)).fetchone() \
+            == (moved_to, 725)
