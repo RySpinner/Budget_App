@@ -22,6 +22,7 @@ decisions to reassess are in DECISIONS.md.
   - set an opening balance (for checking, "Use the bank's earliest balance" does it in one click);
   - for each card, type in a recent statement balance;
   - where the balance matches, press "Mark reconciled through".
+- [ ] **Review DECISIONS.md #132–137** (phase 11b as built). No migration needed for 11b.
 - [ ] **Review DECISIONS.md #122–131** (phase 11a as built).
 - [ ] **Review DECISIONS.md #108–120** (phase 10 as built).
 - [ ] **Review DECISIONS.md #101–107** (double-entry review: generated legs, equity entries, posted-date balances, reconciled-through, books-balance check).
@@ -55,7 +56,7 @@ decisions to reassess are in DECISIONS.md.
 - [x] Before phase 10: store currency rewards credits (kind unknown → Review) instead of excluding them; points-only rows stay excluded (migration 0007)
 - [x] Phase 10: transfer matching and Review tabs (unmatched transfers, needs care); generated legs for accounts without a CSV (migration 0008)
 - [x] Phase 11a: reconciliation and Accounts page (posted-date balances, balance adjustments, reconciled-through dates; migration 0009)
-- [ ] Phase 11b: cash flow, net worth, books-balance check; Dashboard additions
+- [x] Phase 11b: cash flow, net worth, books-balance check; Dashboard additions
 - [ ] Phase 12: PINNED special types: ATM/cash, Venmo/Zelle, checks; split lines to a category or an account; loan accounts
 - [ ] Phase 13: IOU ledger; optional history import
 - [ ] Phase 14 (future): investment accounts

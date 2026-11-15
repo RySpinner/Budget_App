@@ -136,3 +136,41 @@ def category_trend_chart(df: pd.DataFrame, mode: str) -> alt.Chart:
     spent = base.mark_line(strokeWidth=2, point=alt.OverlayMarkDef(size=64, filled=True)).transform_filter(
         "datum.Series == 'Spent'")
     return _finish(alt.layer(lines, spent).properties(height=260), mode)
+
+
+def cash_flow_chart(df: pd.DataFrame, mode: str) -> alt.Chart:
+    """Income and spending side by side for each month (grouped columns, one axis).
+
+    df columns: Month (label), month_start, Series ("Income"/"Spending"), cents, Amount (text).
+    Income takes the first categorical slot and spending the second (validated pair).
+    """
+    ink, palette = INK[mode], SERIES[mode]
+    series = ["Income", "Spending"]
+    chart = alt.Chart(df).mark_bar(stroke=ink["surface"], strokeWidth=2,
+                                   cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+        x=alt.X("Month:N", sort=_month_order(df), title=None,
+                axis=_axis(mode, labelAngle=0, labelColor=ink["secondary"])),
+        xOffset=alt.XOffset("Series:N", sort=series),
+        y=alt.Y("cents:Q", title=None, axis=_money_axis(mode)),
+        color=alt.Color("Series:N", scale=alt.Scale(domain=series, range=[palette[0], palette[1]]), title=None),
+        tooltip=["Month", "Series", "Amount"],
+    ).properties(height=280)
+    return _finish(chart, mode)
+
+
+def net_worth_chart(df: pd.DataFrame, mode: str) -> alt.Chart:
+    """Net worth at each month end: one line with points (a single series, so no legend).
+
+    df columns: Month (label), month_start, cents, Amount (text).
+    """
+    ink, blue = INK[mode], SERIES[mode][0]
+    chart = alt.Chart(df).mark_line(
+        color=blue, strokeWidth=2,
+        point=alt.OverlayMarkDef(size=64, filled=True, color=blue, stroke=ink["surface"], strokeWidth=2),
+    ).encode(
+        x=alt.X("Month:N", sort=_month_order(df), title=None,
+                axis=_axis(mode, labelAngle=0, labelColor=ink["secondary"])),
+        y=alt.Y("cents:Q", title=None, axis=_money_axis(mode)),
+        tooltip=["Month", alt.Tooltip("Amount:N", title="Net worth")],
+    ).properties(height=260)
+    return _finish(chart, mode)

@@ -2,7 +2,7 @@
 
 Status:
 - **v1 (phases 1–7)** is built: credit-card spending tracker, deployed on a Pi.
-- **v2 (phases 8–12)** extends it to checking and savings accounts with light double-entry bookkeeping. Agreed 2026-11-06; phases 8–10 and 11a built.
+- **v2 (phases 8–12)** extends it to checking and savings accounts with light double-entry bookkeeping. Agreed 2026-11-06; phases 8–11 built.
 
 Items marked **OPEN** still need a decision. Items marked **PINNED** are in scope, but their detailed design is deferred because they need extra review or care.
 

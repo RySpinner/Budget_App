@@ -266,6 +266,32 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
 130. **Credit cards reconcile against statement balances typed in by hand,** since no card export seen so far has a balance column (#90).
 131. **Reconciliation warnings on the Dashboard are left for phase 11b,** with net worth and cash flow.
 
+### Phase 11b as built: cash flow, net worth and the books check (2026-11-15)
+132. **Cash flow follows the purchase date (`effective_date`), like budgets:**
+    - income = income rows (split lines count);
+    - spending = expense rows, with refunds netted and uncategorized spending included;
+    - saved = income − spending;
+    - transfers and balance adjustments never count;
+    - rows of unknown kind aren't counted but are reported next to it ("Not counted yet: …").
+133. **The new Dashboard figures use household terms:** money in, money saved and net worth going up are positive. Transaction amounts elsewhere keep the database sign (#87).
+134. **Net worth = money held − money owed,** from the computed balances (posted dates):
+    - accounts whose opening balance is after the day are left out, with a note;
+    - accounts with no opening balance count from $0, and the Dashboard names them;
+    - inactive accounts are included (a closed account's balance should be $0 anyway).
+135. **The books check uses posting dates (`balance_date`),** the same basis as balances, so it adds up exactly:
+    - change in net worth = income − spending + adjustments + rows still in Review + transfer legs that don't cancel within the month (unmatched, or in transit) + opening balances of accounts starting that month;
+    - rows on or before an account's opening date are left out (they're history already in the opening balance);
+    - an "unexplained" remainder should always be $0 and is shown as an error if not;
+    - for the current month it runs to today, like the net worth figure.
+    Because of the date basis, its income and spending can differ slightly from the cash-flow figures.
+136. **Dashboard layout:**
+    - a warning near the top lists accounts that are off from the bank or changed since reconciled;
+    - "Money in and out" and "Net worth" come after the spending sections, followed by an accounts table and the books check in an expander.
+137. **Charts:**
+    - cash flow is grouped columns, income in palette slot 1 (blue) and spending in slot 2 (orange); the pair passed the palette validator in light and dark mode;
+    - net worth is a single line starting from $0;
+    - both have a table view and hover tooltips.
+
 ### Not yet addressed
 30. **Categories and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned. (Accounts can be edited on the Accounts page since phase 11a.)
 

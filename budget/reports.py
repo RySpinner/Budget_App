@@ -1,5 +1,6 @@
-"""Numbers for the Dashboard. Everything is computed from the spending_lines
-and monthly_totals views on request; nothing here is stored.
+"""Numbers for the Dashboard. Everything is computed from the database views
+(spending_lines, monthly_totals, transaction_lines) and the account_balance()
+function on request; nothing here is stored.
 
 All amounts are integer cents.
 """
@@ -137,3 +138,153 @@ def category_trend(conn: psycopg.Connection, top_category_id: int, last_month: d
         """,
         {"cat": top_category_id, "first": first, "last": last_month},
     ).fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Cash flow, net worth and the books check (phase 11b)
+#
+# Shown in household terms: money in and net worth going up are positive.
+# (The database's sign convention is the reverse: positive = against us.)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CashFlowMonth:
+    month: date
+    income_cents: int        # money earned (income rows, split-aware), positive
+    spending_cents: int      # expense rows, refunds netted, uncategorized spending included
+    unsorted_cents: int      # rows of unknown kind (Review), money in positive
+    unsorted_count: int
+
+    @property
+    def saved_cents(self) -> int:
+        """Income minus spending: positive = saved, negative = overspent. Transfers never count."""
+        return self.income_cents - self.spending_cents
+
+
+def cash_flow(conn: psycopg.Connection, last_month: date, months: int = 12) -> list[CashFlowMonth]:
+    """Income vs spending per month (by effective_date, like budgets), including empty months.
+
+    Transfers and balance adjustments are left out. Rows whose kind isn't
+    known yet are reported separately, since they could be either.
+    """
+    first = add_months(last_month, -(months - 1))
+    rows = conn.execute(
+        """
+        SELECT g.month::date,
+               COALESCE((SELECT -sum(amount_cents) FROM transaction_lines l
+                          WHERE l.month = g.month AND l.kind = 'income'), 0)::bigint,
+               COALESCE((SELECT sum(amount_cents) FROM transaction_lines l
+                          WHERE l.month = g.month AND l.kind = 'expense'), 0)::bigint,
+               COALESCE((SELECT -sum(amount_cents) FROM transactions t
+                          WHERE date_trunc('month', t.effective_date) = g.month AND t.kind IS NULL), 0)::bigint,
+               (SELECT count(*) FROM transactions t
+                 WHERE date_trunc('month', t.effective_date) = g.month AND t.kind IS NULL)
+          FROM generate_series(%s::date, %s::date, interval '1 month') AS g(month)
+         ORDER BY g.month
+        """,
+        (first, last_month),
+    ).fetchall()
+    return [CashFlowMonth(*r) for r in rows]
+
+
+@dataclass
+class NetWorth:
+    as_of: date
+    assets_cents: int            # money held in checking, savings, cash
+    liabilities_cents: int       # money owed on cards
+    accounts_not_started: int    # accounts whose opening balance is after this day (left out)
+
+    @property
+    def net_cents(self) -> int:
+        return self.assets_cents - self.liabilities_cents
+
+
+def net_worth(conn: psycopg.Connection, as_of: date) -> NetWorth:
+    """Assets - liabilities at the end of a day, from computed balances (posted dates)."""
+    row = conn.execute(
+        """
+        SELECT COALESCE(sum(b) FILTER (WHERE account_class = 'asset'), 0)::bigint,
+               COALESCE(sum(b) FILTER (WHERE account_class = 'liability'), 0)::bigint,
+               count(*) FILTER (WHERE b IS NULL)
+          FROM (SELECT account_class, account_balance(id, %s) AS b FROM accounts) a
+        """,
+        (as_of,),
+    ).fetchone()
+    return NetWorth(as_of, *row)
+
+
+def net_worth_series(conn: psycopg.Connection, last_month: date, today: date, months: int = 12) -> list[NetWorth]:
+    """Net worth at the end of each month (today for the current month), oldest first. Future months are left out."""
+    points = []
+    for n in range(months - 1, -1, -1):
+        month = add_months(last_month, -n)
+        day = as_of_day(month, today)
+        if day is not None:
+            points.append(net_worth(conn, day))
+    return points
+
+
+@dataclass
+class BooksCheck:
+    """How a month's change in net worth breaks down (SPEC section 2, principle 8).
+
+    All by POSTING date (balance_date), the same basis as balances, so the
+    parts add up exactly. That's why income and spending here can differ a
+    little from the cash-flow view, which follows purchase dates like budgets.
+    """
+    month: date
+    net_worth_change_cents: int
+    income_cents: int
+    spending_cents: int
+    adjustments_cents: int          # balance adjustments (Accounts page)
+    transfers_cents: int            # transfer legs that don't cancel within the month: unmatched, or in transit
+    unsorted_cents: int             # rows of unknown kind, still in Review
+    openings_cents: int             # accounts whose opening balance falls in this month
+
+    @property
+    def explained_cents(self) -> int:
+        """Income - spending + adjustments: what the change should be once nothing is pending."""
+        return self.income_cents - self.spending_cents + self.adjustments_cents
+
+    @property
+    def pending_cents(self) -> int:
+        """The part still waiting on a person: Review rows and transfers without their other side."""
+        return self.transfers_cents + self.unsorted_cents
+
+    @property
+    def unexplained_cents(self) -> int:
+        """Should always be 0. Anything else means the numbers don't add up (a bug worth reporting)."""
+        return (self.net_worth_change_cents - self.explained_cents - self.pending_cents
+                - self.openings_cents)
+
+
+def books_check(conn: psycopg.Connection, month: date, through: date | None = None) -> BooksCheck:
+    """Net worth change over a month (up to `through`, e.g. today, if that's earlier), and its parts."""
+    end = min(month_end(month), through) if through else month_end(month)
+    before = date.fromordinal(month.toordinal() - 1)     # last day of the previous month
+    flows = dict(conn.execute(
+        """
+        SELECT COALESCE(t.kind, 'unsorted'), -sum(t.amount_cents)::bigint
+          FROM transactions t JOIN accounts a ON a.id = t.account_id
+         WHERE t.balance_date BETWEEN %s AND %s
+           AND (a.opening_balance_date IS NULL OR t.balance_date > a.opening_balance_date)
+         GROUP BY 1
+        """,
+        (month, end),
+    ).fetchall())
+    openings = conn.execute(
+        """SELECT COALESCE(sum(CASE account_class WHEN 'asset' THEN opening_balance_cents
+                                                 ELSE -opening_balance_cents END), 0)::bigint
+             FROM accounts WHERE opening_balance_date BETWEEN %s AND %s""",
+        (month, end),
+    ).fetchone()[0]
+    return BooksCheck(
+        month=month,
+        net_worth_change_cents=net_worth(conn, end).net_cents - net_worth(conn, before).net_cents,
+        income_cents=flows.get("income", 0),
+        spending_cents=-flows.get("expense", 0),
+        adjustments_cents=flows.get("adjustment", 0),
+        transfers_cents=flows.get("transfer", 0),
+        unsorted_cents=flows.get("unsorted", 0),
+        openings_cents=openings,
+    )

@@ -75,3 +75,15 @@ def test_trend_months_in_date_order_even_when_stacks_differ():
       + [{"Month": "Aug 2026", "month_start": date(2026, 8, 1), "Category": "B", "cents": 100, "Amount": "$1.00"}])
     spec = trend_chart(df, ["A", "B", "C", "D"], "light").to_dict()
     assert spec["encoding"]["x"]["sort"] == ["Aug 2026", "Sep 2026", "Oct 2026"]
+
+
+def test_dashboard_cash_flow_and_net_worth(db, monkeypatch):
+    app = run("dashboard_page.py", db, monkeypatch)
+    assert not app.exception, app.exception
+    metrics = {m.label: m.value for m in app.metric}
+    assert (metrics["Income"], metrics["Spending"], metrics["Overspent"]) == ("$0.00", "$54.99", "$54.99")
+    # The two cash entries came out of the Cash account, which had no opening balance.
+    net_label = next(label for label in metrics if label.startswith("Net worth on"))
+    assert metrics[net_label] == "-$54.99"
+    assert any(e.label.startswith("Does it add up?") for e in app.expander)
+    assert not app.error
