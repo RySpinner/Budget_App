@@ -68,6 +68,22 @@ python -m budget.seed               # add missing categories, people, accounts (
 - **Seeding** only inserts rows that are missing (matched by name). It never renames or deletes, so edits made later in the app are safe. If `local.toml` disagrees with an existing account, it prints a warning; change that account in the database instead, e.g. `UPDATE accounts SET parser_key = 'citi' WHERE id = 2;`.
 - **Adding a category:** add it to `seed/categories.toml` and run `python -m budget.seed`. To retire one, set `active = false` in the database rather than deleting it; if you rename one, rename it in the TOML file too.
 
+### Sharing local.toml between machines
+
+If you develop on two computers against the same database, keep one copy of `seed/local.toml` in the database instead of copying the file around:
+
+```bash
+python -m budget.migrate               # once, creates the table (migration 0010)
+python -m budget.local_sync push       # on the machine that has the file: save it to the database
+python -m budget.local_sync pull       # on the other machine: download it to seed/local.toml
+python -m budget.local_sync status     # is my file the same as the database copy?
+```
+
+- `pull` never replaces a local file that is different. Use `pull --force` to replace it; the old one is kept as `local.toml.bak` (gitignored).
+- `push` replaces the database copy (it must be valid TOML), so `pull` first if the other machine may have changed it.
+- The same commands work on Windows PowerShell with the virtual environment active.
+- Only `local.toml` is stored. `config/secrets.toml` is never put in the database: it holds the password needed to reach it, so copy that one by hand. The database copy holds names and last 4 digits, like the people and accounts tables, and is covered by the nightly backup.
+
 ## Running the app
 
 ```bash

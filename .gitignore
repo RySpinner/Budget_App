@@ -1,6 +1,7 @@
 # Credentials and personal seed data
 config/secrets.toml
 seed/local.toml
+seed/local.toml.bak
 .streamlit/secrets.toml
 
 # Real bank data and database dumps: never commit

@@ -41,6 +41,7 @@ decisions to reassess are in DECISIONS.md.
 - [ ] **Set up the Pi** following docs/deploy.md: service, password, backups to your Mac/Linux/NAS, and run `restore-test.sh` once.
 - [ ] **Access away from home:** decide whether it's needed. If so, follow the Tailscale section in docs/deploy.md. (SPEC §11)
 - [ ] Look over the **Review** list in DECISIONS.md.
+- [ ] **After pulling the local.toml sharing feature:** run `python -m budget.migrate` (0010), then `python -m budget.local_sync push` on the machine that has your real `local.toml`, and `pull` on the other. Review DECISIONS.md #141–145.
 
 ## Build
 - [x] Phase 1: schema, migrations, seed data
