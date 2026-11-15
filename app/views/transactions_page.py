@@ -20,7 +20,7 @@ from app.ui import md
 from budget.parsers.base import describe
 from budget.transactions import (
     TRANSFER, UNCATEGORIZED, UNKNOWN_KIND, Filters, SplitLine, add_manual, cash_account_id, delete_manual,
-    get_splits, load_lines, manual_amount_cents, months_with_data, set_splits, update_line,
+    get_splits, load_lines, months_with_data, set_splits, update_line,
 )
 
 TRANSFER_LABEL = "↔ Transfer between our accounts"
@@ -39,7 +39,6 @@ if state.txn_flash:
 
 with connect() as conn:
     categories = subcategory_choices(conn)                       # id -> "Top › Sub"
-    income_category_ids = set(subcategory_choices(conn, kind="income"))
     all_categories = subcategory_choices(conn, include_inactive=True)
     top_rows = conn.execute(
         "SELECT id, name, kind FROM categories WHERE parent_id IS NULL AND active ORDER BY kind, sort_order, name"
@@ -329,8 +328,8 @@ with st.expander("Add a manual entry (cash spending, interest, anything without 
         entry_date = f1.date_input("Date", value=today)
         amount_text = f2.text_input(
             "Amount", placeholder="12.34",
-            help="Type it the way you'd say it: the amount spent, or for an income category (e.g. Interest) the "
-                 "amount received. Use a minus sign for a refund, or for income taken back.")
+            help="Same sign as the amounts in the table above: money out (spending) is positive; use a minus "
+                 "sign for money in, e.g. -5.00 for interest received, or a refund.")
         description = st.text_input("Description", placeholder="e.g. Farmers market")
         f3, f4, f5 = st.columns(3)
         category_label = f3.selectbox("Category", list(categories.values()), index=None,
@@ -343,12 +342,11 @@ with st.expander("Add a manual entry (cash spending, interest, anything without 
         if st.form_submit_button("Add entry"):
             try:
                 category_id = category_label_to_id[category_label] if category_label else None
-                kind_typed = "income" if category_id in income_category_ids else None
                 with connect() as conn:
                     add_manual(
                         conn,
                         txn_date=entry_date,
-                        amount_cents=manual_amount_cents(parse_cents(amount_text), kind_typed),
+                        amount_cents=parse_cents(amount_text),
                         description=description,
                         purchaser_id=person_name_to_id[purchaser],
                         category_id=category_id,

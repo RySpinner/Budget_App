@@ -292,12 +292,12 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
     - net worth is a single line starting from $0;
     - both have a table view and hover tooltips.
 
-### Fix: manual income entries (2026-11-15)
-138. **The manual-entry form takes amounts the way you'd say them.**
-    - For an income category, "5.00" now means $5 received and is stored as −500 (money in).
-    - Before this fix it was stored as +500, i.e. $5 *out*. So interest typed into a hand-entered savings account lowered its balance, off by twice the amount, and showed as negative income.
-    - Spending, or no category, is unchanged: stored as typed, with a minus sign for a refund.
-    - The conversion is `transactions.manual_amount_cents`. `add_manual` itself keeps the database sign.
+### Manual entries and the opening balance (2026-11-15)
+138. **Manual-entry amounts use the same sign as the Transactions table:** money out (spending) positive, money in negative, so interest received is entered as −5.00.
+    - The help text now says so.
+    - A sign flip for income categories was added and then reverted the same day. The owner was already entering income as negative, so flipping would have broken that.
+    - Making money in read as positive everywhere is the still-open display question (#87).
+139. **The Accounts page now says how many transactions are dated on or before the opening balance date.** Those rows don't change the balance, since the opening balance (end of that day) already includes them, and nothing used to point that out. This came up when hand-entered interest in a savings account with no CSV seemed "not counted".
 
 ### Not yet addressed
 30. **Categories and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned. (Accounts can be edited on the Accounts page since phase 11a.)

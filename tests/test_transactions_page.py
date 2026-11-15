@@ -67,7 +67,7 @@ def test_bad_manual_amount_shows_error(app):
 
 
 def test_manual_income_entry_is_money_in(db, monkeypatch):
-    """Interest typed as 5.00 into an account with no CSV adds $5 to its balance (it used to subtract it)."""
+    """Interest entered as -5.00 (money in) into an account with no CSV adds $5 to its balance."""
     from datetime import date
 
     from budget.balances import balance_on, set_opening_balance
@@ -82,7 +82,7 @@ def test_manual_income_entry_is_money_in(db, monkeypatch):
     monkeypatch.setenv("BUDGET_DATABASE_URL", db)
     app = AppTest.from_file(PAGE, default_timeout=10).run()
     form_inputs = {t.label: t for t in app.text_input}
-    form_inputs["Amount"].input("5.00")
+    form_inputs["Amount"].input("-5.00")
     form_inputs["Description"].input("Fake interest")
     next(s for s in app.selectbox if s.label == "Category" and "Income › Interest" in s.options
          ).select("Income › Interest")

@@ -22,7 +22,7 @@ decisions to reassess are in DECISIONS.md.
   - set an opening balance (for checking, "Use the bank's earliest balance" does it in one click);
   - for each card, type in a recent statement balance;
   - where the balance matches, press "Mark reconciled through".
-- [ ] **Fix manual income entries made before 2026-11-15** (e.g. interest in the test savings account). They were stored as money out (DECISIONS.md #138). On the Transactions page, set Kind → Income and pick the account, choose each entry, delete it and add it again. The Accounts page difference should then go to $0.
+- [ ] **Interest in the test savings account:** open it on the Accounts page. If there's a note about transactions on or before the opening balance date, that's why the interest isn't counted (DECISIONS.md #139). Otherwise check the entry's account on the Transactions page: the manual-entry form defaults to Cash.
 - [ ] **Review DECISIONS.md #132–137** (phase 11b as built). No migration needed for 11b.
 - [ ] **Review DECISIONS.md #122–131** (phase 11a as built).
 - [ ] **Review DECISIONS.md #108–120** (phase 10 as built).

@@ -201,3 +201,13 @@ def test_add_and_edit_account(conn, basics, bank, add):
                  owner_person_id=basics["person"], active=False)
     assert conn.execute("SELECT display_name, active FROM accounts WHERE id = %s", (bank,)).fetchone() == \
         ("Bank 2", False)
+
+
+def test_rows_before_opening_are_reported(conn, bank, add):
+    from budget.balances import rows_before_opening
+    set_opening_balance(conn, bank, 10000, D(2026, 11, 1))
+    add(bank, -500, "2026-10-31")       # e.g. interest dated before the opening balance
+    add(bank, -500, "2026-11-01")       # on the opening day: also already included
+    add(bank, -500, "2026-11-02")       # counted
+    assert rows_before_opening(conn, bank) == (2, D(2026, 11, 1))
+    assert balance_on(conn, bank, D(2026, 11, 30)) == 10500

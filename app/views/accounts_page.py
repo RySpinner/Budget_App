@@ -21,7 +21,8 @@ import streamlit as st
 from app.ui import md
 from budget.balances import (
     ACCOUNT_TYPES, account_summaries, add_adjustment, delete_snapshot, earliest_snapshot,
-    reconciliation_history, save_account, save_snapshot, set_opening_balance, set_reconciled_through,
+    reconciliation_history, rows_before_opening, save_account, save_snapshot, set_opening_balance,
+    set_reconciled_through,
 )
 from budget.db import connect
 from budget.money import format_cents, format_plain, parse_cents
@@ -102,6 +103,7 @@ if account_id is not None:
     with connect() as conn:
         history = reconciliation_history(conn, account_id)
         first_bank = earliest_snapshot(conn, account_id)
+        early_count, early_last = rows_before_opening(conn, account_id)
 
     m1, m2, m3 = st.columns(3)
     m1.metric(f"Balance today ({word})", money_or_dash(a.balance_cents))
@@ -122,6 +124,13 @@ if account_id is not None:
         st.caption(md(f"Opening balance: {format_cents(a.opening_balance_cents)} {word} at the end of "
                       f"{long_date(a.opening_balance_date)}. Transactions on or before that day are already "
                       "included in it."))
+        if early_count:
+            st.info(md(
+                f"{early_count} transaction{'s are' if early_count != 1 else ' is'} dated on or before the opening "
+                f"balance date (the latest on {long_date(early_last)}), so {'they don' if early_count != 1 else 'it doesn'}"
+                "'t change the balance. That's right if the opening balance already includes "
+                f"{'them' if early_count != 1 else 'it'}. If not, move the opening balance to an earlier day "
+                "(under Edit this account), or check the transaction's date."))
 
     # Reconciliation history ---------------------------------------------------
     st.subheader("Reconciliation")

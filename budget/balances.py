@@ -234,6 +234,22 @@ def set_reconciled_through(conn: psycopg.Connection, account_id: int, as_of: dat
     conn.execute("UPDATE accounts SET reconciled_through = %s WHERE id = %s", (as_of, account_id))
 
 
+def rows_before_opening(conn: psycopg.Connection, account_id: int) -> tuple[int, date | None]:
+    """How many of an account's rows are dated on or before its opening balance date, and the latest such date.
+
+    These don't change the balance: the opening balance (the balance at the
+    end of its day) already includes them. Shown on the Accounts page so a
+    row dated too early doesn't silently look "not counted".
+    """
+    return conn.execute(
+        """SELECT count(*), max(t.balance_date)
+             FROM transactions t JOIN accounts a ON a.id = t.account_id
+            WHERE t.account_id = %s AND a.opening_balance_date IS NOT NULL
+              AND t.balance_date <= a.opening_balance_date""",
+        (account_id,),
+    ).fetchone()
+
+
 def earliest_snapshot(conn: psycopg.Connection, account_id: int) -> tuple[date, int] | None:
     """(date, balance) of the earliest bank-stated balance, e.g. to use as the opening balance."""
     return conn.execute(
