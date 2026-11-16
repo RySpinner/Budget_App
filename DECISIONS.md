@@ -315,6 +315,14 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
 144. **Seeding is unchanged:** it still reads the file on disk and only inserts. Pulling a new `local.toml` doesn't add anything to the database until `python -m budget.seed`.
 145. **Branches:** work now goes `feature branch -> dev -> main`. `dev` was created from `main` on 2026-11-15.
 
+### Capital One parser (2026-11-16)
+146. **Parser key `capital-one`** (with a hyphen, at the owner's request).
+147. **Debit/Credit columns:** a Debit is a purchase (positive), a Credit is negative. A row with both filled, or neither, is refused, since an unquoted thousands comma ("1,234.56") would split an amount into two and could otherwise be misread.
+148. **Payments are found by description,** not Category (Capital One's "Payment/Credit" covers payments, cash back and refunds): `AUTOPAY`, `PYMT` or `PAYMENT ... THANK YOU` -> transfer (card payment). Only `AUTOPAY PYMT` has been seen; the rest are guesses.
+149. **Cash back / REWARD(S)** goes through `rewards_row` (stored, waits in Review; $0 = points only, excluded). The "CREDIT-CASH BACK REWARD" row has been seen. Income vs negative expense stays OPEN.
+150. **Everything else is an expense** (a Credit is a refund; interest and fees are expenses, #decided 2026-11-01). Pending rows are assumed not to be in the export (unconfirmed).
+151. **A trailing comma on a row is ignored** (the sample had one), but an unquoted comma in a description is re-joined: with 8 fields, the last empty one is dropped only if the Debit position holds an amount, not a category name.
+
 ### Not yet addressed
 30. **Categories and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned. (Accounts can be edited on the Accounts page since phase 11a.)
 

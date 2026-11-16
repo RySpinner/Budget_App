@@ -17,7 +17,7 @@ name = "Partner B"
 #               retirement / loan are reserved for later)
 #   owner:      a person above, or "Joint" for joint accounts
 #   parser_key: which parser reads this account's CSV export.
-#               Available: "citi", "chase", "bcu" (BCU card or checking), "amex",
+#               Available: "citi", "chase", "bcu" (BCU card or checking), "amex", "capital-one",
 #               "sofi" (SoFi checking).
 #               Leave it out for an account you only enter by hand.
 [[account]]
