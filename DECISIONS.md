@@ -308,6 +308,13 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
       - a row the app created for the transfer moves to the new date with it.
     - Editing in a reconciled period gives the same after-the-fact warning as adding an entry.
 
+### Sharing local.toml between machines (2026-11-15)
+141. **`local.toml` is kept in the database** (table `shared_files`, migration 0010) so two dev machines on one database can share it. `python -m budget.local_sync push | pull | status`. It's a general name/content table so another small untracked file could use it later, but only `local.toml` is wired up.
+142. **`secrets.toml` is deliberately not stored there.** It holds the credentials needed to reach the database, and the login hash and cookie secret. The database copy of `local.toml` does hold names and last 4 digits, same as the people and accounts tables.
+143. **`pull` refuses to replace a different local file** unless `--force`, which keeps `local.toml.bak` (gitignored). **`push` always replaces** the database copy (after checking it parses as TOML) and does not detect that another machine changed it first; `status` and `pull` first are the safeguard. Last-writer-wins was chosen to keep it simple for two users; say if you want a conflict check.
+144. **Seeding is unchanged:** it still reads the file on disk and only inserts. Pulling a new `local.toml` doesn't add anything to the database until `python -m budget.seed`.
+145. **Branches:** work now goes `feature branch -> dev -> main`. `dev` was created from `main` on 2026-11-15.
+
 ### Not yet addressed
 30. **Categories and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned. (Accounts can be edited on the Accounts page since phase 11a.)
 
