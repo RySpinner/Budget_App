@@ -118,7 +118,7 @@ python -m budget.import_csv --batches                  # past imports
 python -m budget.import_csv --undo 7                   # undo batch 7
 ```
 
-Each account's `parser_key` picks its parser: `citi`, `chase`, `bcu` (BCU credit union: the Visa card and checking use the same format) `amex`, `capital-one` or `sofi` (SoFi checking) so far. For bank accounts, the running balance in the file is saved as the account's end-of-day balance, and rows the parser can't classify (spending, income or transfer?) wait in Review. When the Import page can tell from a file's format which single account it belongs to, it picks the account automatically. Card payments are kept as **transfers** (money moving between your own accounts), never counted as spending. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
+Each account's `parser_key` picks its parser: `citi`, `chase`, `bcu` (BCU credit union: the Visa card and checking use the same format) `amex`, `capital-one`, `apple-card` or `sofi` (SoFi checking) so far. For bank accounts, the running balance in the file is saved as the account's end-of-day balance, and rows the parser can't classify (spending, income or transfer?) wait in Review. When the Import page can tell from a file's format which single account it belongs to, it picks the account automatically. Card payments are kept as **transfers** (money moving between your own accounts), never counted as spending. Re-importing overlapping exports is safe: duplicates are skipped. Original files are archived to `archive/` (or `[paths] archive_dir` in `secrets.toml`).
 
 ## Tests
 
@@ -150,7 +150,7 @@ Use a Postgres user that is allowed to create databases. With the default `postg
 ```
 app/           Streamlit app (streamlit_app.py, views/ = one file per page, charts.py, ui.py, auth_gate.py)
 budget/        Python package: config, db, migrate, seed, money, merchant, importer, import_csv, rules, categories, transactions, budgets, reports
-budget/parsers one module per institution (add one with the /new-parser Claude Code skill) (citi.py, chase.py, bcu.py, amex.py, capital_one.py, sofi.py), sharing base.ParsedRow
+budget/parsers one module per institution (add one with the /new-parser Claude Code skill) (citi.py, chase.py, bcu.py, amex.py, capital_one.py, apple_card.py, sofi.py), sharing base.ParsedRow
 migrations/    versioned schema changes
 seed/          categories.toml (tracked), local.toml (untracked: people and accounts)
 config/        secrets.toml (untracked)

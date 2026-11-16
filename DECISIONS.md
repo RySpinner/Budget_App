@@ -323,6 +323,12 @@ Proposed in a review of how close the design is to double-entry bookkeeping. Wri
 150. **Everything else is an expense** (a Credit is a refund; interest and fees are expenses, #decided 2026-11-01). Pending rows are assumed not to be in the export (unconfirmed).
 151. **A trailing comma on a row is ignored** (the sample had one), but an unquoted comma in a description is re-joined: with 8 fields, the last empty one is dropped only if the Debit position holds an amount, not a category name.
 
+### Apple Card parser (2026-11-16)
+152. **Parser key `apple-card`.** Apple's Type column decides the kind: Payment -> transfer (card payment); Purchase, Credit, Debit and Installment -> expense (a Credit such as a return is negative = a refund); any other Type -> unknown (an expense on a card). Only Payment, Purchase, Debit and Credit have been seen.
+153. **Daily Cash Adjustment is treated as a rewards row** (kind unknown, reason "rewards credit", waits in Review), not as spending and not as a transfer. It is the clawback of Daily Cash earned on a returned purchase: the cash was paid into another account (not on the card), then charged back here. Review it with the same treatment as the cash-back deposit on the other account (income vs negative expense is still OPEN), so the pair nets to zero; the return itself (-$89.48 in the sample) stays a plain refund. Alternative if the owner prefers: plain expense, which would overstate spending by the clawback.
+154. **A row with a different number of columns than the header is refused** (e.g. an unquoted "1,234.56"), not guessed at. Whether Apple quotes thousands has not been seen.
+155. **Merchant, Category and Purchased By are kept in raw_row only.** Apple's cleaned Merchant isn't used (the importer's own cleaning of the Description applies); Purchased By could later suggest the person.
+
 ### Not yet addressed
 30. **Categories and people** can only be edited with SQL or the seed file for now. SPEC's Settings page has no phase assigned. (Accounts can be edited on the Accounts page since phase 11a.)
 

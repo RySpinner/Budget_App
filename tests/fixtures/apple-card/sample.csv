@@ -1,0 +1,9 @@
+Transaction Date,Clearing Date,Description,Merchant,Category,Type,Amount (USD),Purchased By
+11/10/2026,11/10/2026,FAKE SUBSCRIPTION CITY ST,Fake Subscription,Other,Purchase,9.99,Person A
+11/09/2026,11/10/2026,FAKE CAFE CITY ST,Fake Cafe,Restaurants,Purchase,8.88,Person A 
+11/09/2026,11/10/2026,FAKE CAFE CITY ST,Fake Cafe,Restaurants,Purchase,8.88,Person A 
+11/08/2026,11/09/2026,"FAKE OUTDOOR STORE, INC CITY ST",Fake Outdoor Store,Shopping,Purchase,"1,500.00",Person B
+11/05/2026,11/05/2026,ACH DEPOSIT INTERNET TRANSFER FROM ACCOUNT ENDING IN 9999,Ach Deposit Internet Transfer From Account Ending In 9999,Payment,Payment,"-1,234.56",Person A
+10/5/2026,10/5/2026,DAILY CASH ADJUSTMENT,Daily Cash Adjustment,Debit,Debit,2.00,Person A
+10/3/2026,10/5/2026,Fake Store (RETURN),Fake Store (return),Credit,Credit,-89.48,Person A
+

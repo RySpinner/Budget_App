@@ -28,11 +28,12 @@ decisions to reassess are in DECISIONS.md.
 - [ ] **Review DECISIONS.md #108–120** (phase 10 as built).
 - [ ] **Review DECISIONS.md #101–107** (double-entry review: generated legs, equity entries, posted-date balances, reconciled-through, books-balance check).
 - [ ] **Decide:** rewards / cash-back credits as income or as negative expense (they'll be stored and wait in Review meanwhile); the transfer matching window (default 5 days); how much cash tracking is wanted; the income categories.
-- [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase, BCU card, Amex, Capital One. Bank accounts so far: BCU checking, SoFi checking.
+- [ ] **Other card issuers.** For each one, send the header row and a few sample rows (fake data is fine). One parser per issuer. Done so far: Citi, Chase, BCU card, Amex, Capital One, Apple Card. Bank accounts so far: BCU checking, SoFi checking.
 - [ ] **Chase:** Payment confirmed. When they turn up, send a real **Return**, **Fee** and **Adjustment** row (fake amounts are fine) to confirm DECISIONS.md #48.
 - [ ] **BCU card:** payment and purchase confirmed. When they turn up, send a real **refund**, **rewards redemption**, **interest/fee** row, and say whether **pending** charges appear in the export (DECISIONS.md #69–75). If your credit union checking/savings export has the same columns, say so: phase 9 can reuse this parser.
 - [ ] **Amex:** payment, purchase and a streaming statement credit confirmed. Benefit credits are refunds (decided). When they turn up, send a real **return**, **Membership Rewards** and **interest/fee** row.
 - [ ] **Capital One:** autopay payment, purchase and cash back confirmed from a 3-row sample. When they turn up, send a real **refund**, **interest/fee** row and a **large amount (1,000+)** to see if it is quoted, and say whether **pending** charges appear (DECISIONS.md #146–151).
+- [ ] **Apple Card:** purchase, payment, return and Daily Cash Adjustment seen. Send a real **1,000+ amount** (quoted?), **interest/fee**, **Installment** and any other **Type**; say whether pending charges appear. **Decide** how the Daily Cash Adjustment and its cash-back deposit in the savings account should be treated (DECISIONS.md #152-155; same OPEN rewards question).
 - [ ] *Idea:* use Chase's own Category column to pre-fill suggestions on the Review page (DECISIONS.md #50).
 - [ ] **Category taxonomy:** confirm with your partner (SPEC §4, OPEN).
 - [ ] **Budget amounts**, especially Dining & Going Out (SPEC §4, OPEN). Enter them on the Budgets page.
